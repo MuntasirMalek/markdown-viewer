@@ -53,70 +53,125 @@ function exportPdf() {
     vscode.postMessage({ type: 'exportPdf' });
 }
 
-// BINDIRECTIONAL SYNC: Smooth & Accurate
-// We'll use a smoother, debounced scroll handling
-let isSyncing = false; // Flag to prevent echo loops
-let scrollTimeout;
+// ============================================
+// SYNC LOGIC: Linear Interpolation & Throttle
+// ============================================
 
+let isSyncing = false;
+let lastScrollTime = 0;
+
+// Preview -> Editor Sync (Throttled, not Debounced)
 const scrollHandler = () => {
-    if (isSyncing) return; // Ignore scrolls triggered by sync
+    if (isSyncing) return;
 
-    if (scrollTimeout) clearTimeout(scrollTimeout);
-    scrollTimeout = setTimeout(() => {
-        const elements = document.querySelectorAll('[data-line]');
-        let targetLine = 0;
-        let minDist = Infinity;
+    const now = Date.now();
+    if (now - lastScrollTime < 50) return; // 20fps throttle
+    lastScrollTime = now;
 
-        // Find line closest to top of viewport
-        const viewTop = 0;
+    const elements = document.querySelectorAll('[data-line]');
+    if (elements.length === 0) return;
 
-        for (let el of elements) {
-            const rect = el.getBoundingClientRect();
-            // We want elements near the top, but not way above
-            const dist = Math.abs(rect.top - viewTop);
+    // Find the current scroll position relative to elements
+    const scrollTop = window.scrollY;
 
-            // Check if element is roughly at the top (say within 300px)
-            if (dist < minDist && rect.top < window.innerHeight / 2) {
-                minDist = dist;
-                targetLine = parseInt(el.getAttribute('data-line'));
-            }
+    // Find element just before and just after the scroll top
+    let beforeEl = null;
+    let afterEl = null;
+
+    for (const el of elements) {
+        if (el.offsetTop <= scrollTop) {
+            beforeEl = el;
+        } else {
+            afterEl = el;
+            break; // Sorted by appearance in DOM usually implies sorted by top
         }
+    }
 
-        if (targetLine > 0) {
-            vscode.postMessage({
-                type: 'revealLine',
-                line: targetLine
-            });
-        }
-    }, 50); // Faster response than 150ms
+    let targetLine = 0;
+
+    if (beforeEl && afterEl) {
+        // Interpolate
+        const minLine = parseInt(beforeEl.getAttribute('data-line'));
+        const maxLine = parseInt(afterEl.getAttribute('data-line'));
+
+        const minPos = beforeEl.offsetTop;
+        const maxPos = afterEl.offsetTop;
+
+        const ratio = (scrollTop - minPos) / (maxPos - minPos);
+        targetLine = minLine + Math.round((maxLine - minLine) * ratio);
+    } else if (beforeEl) {
+        targetLine = parseInt(beforeEl.getAttribute('data-line'));
+    } else if (afterEl) {
+        targetLine = parseInt(afterEl.getAttribute('data-line'));
+    }
+
+    if (targetLine >= 0) {
+        vscode.postMessage({
+            type: 'revealLine',
+            line: targetLine
+        });
+    }
 };
 
 window.addEventListener('scroll', scrollHandler, { capture: true });
-document.addEventListener('scroll', scrollHandler, { capture: true });
-document.body.addEventListener('scroll', scrollHandler, { capture: true });
 
-// Listener for scroll commands from Extension (Preview Scroll)
+// Editor -> Preview Sync (Instant, Interpolated)
 window.addEventListener('message', event => {
     const message = event.data;
     if (message.type === 'scrollTo') {
         const line = message.line;
         const totalLines = message.totalLines;
 
-        // Try strict line match
-        const el = document.querySelector(`[data-line="${line}"]`);
+        isSyncing = true;
 
-        isSyncing = true; // Set flag
+        // 1. Precise Element Match
+        const exactEl = document.querySelector(`[data-line="${line}"]`);
+        if (exactEl) {
+            // align to top, INSTANT execution
+            window.scrollTo({ top: exactEl.offsetTop, behavior: 'auto' });
+        } else {
+            // 2. Interpolation Strategy
+            // Find closest markers
+            const elements = Array.from(document.querySelectorAll('[data-line]'));
+            if (elements.length > 0) {
+                const sorted = elements.map(el => ({
+                    line: parseInt(el.getAttribute('data-line')),
+                    top: el.offsetTop
+                })).sort((a, b) => a.line - b.line);
 
-        if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } else if (totalLines) {
-            // Percentage Fallback
-            const pct = line / totalLines;
-            const targetY = pct * document.body.scrollHeight;
-            window.scrollTo({ top: targetY, behavior: 'smooth' });
+                let before = null;
+                let after = null;
+
+                for (const item of sorted) {
+                    if (item.line <= line) before = item;
+                    else { after = item; break; }
+                }
+
+                let targetY = 0;
+                if (before && after) {
+                    const ratio = (line - before.line) / (after.line - before.line);
+                    targetY = before.top + (after.top - before.top) * ratio;
+                } else if (before) {
+                    targetY = before.top; // Should maybe extrapolate?
+                } else if (after) {
+                    targetY = 0; // Top of doc
+                }
+
+                // If no markers found at all, fallback to percentage (handled below indirectly or by totalLines)
+                if (before || after) {
+                    window.scrollTo({ top: targetY, behavior: 'auto' });
+                } else if (totalLines) {
+                    const pct = line / totalLines;
+                    window.scrollTo({ top: pct * document.body.scrollHeight, behavior: 'auto' });
+                }
+            } else if (totalLines) {
+                // No markers, pure percentage
+                const pct = line / totalLines;
+                window.scrollTo({ top: pct * document.body.scrollHeight, behavior: 'auto' });
+            }
         }
 
-        // Release flag after animation
-        setTimeout(() => { isSyncing = false; }, 600);
+        // Release lock
+        setTimeout(() => { isSyncing = false; }, 100);
     }
 });
