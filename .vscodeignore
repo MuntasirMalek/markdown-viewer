@@ -10,8 +10,5 @@ vsc-extension-quickstart.md
 **/*.ts
 node_modules/**
 !node_modules/puppeteer-core/**
-!node_modules/katex/**
-!node_modules/marked/**
-!node_modules/highlight.js/**
 .DS_Store
 *.log

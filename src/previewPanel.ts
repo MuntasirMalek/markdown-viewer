@@ -30,8 +30,7 @@ export class PreviewPanel {
                 enableScripts: true,
                 retainContextWhenHidden: true,
                 localResourceRoots: [
-                    vscode.Uri.joinPath(extensionUri, 'media'),
-                    vscode.Uri.joinPath(extensionUri, 'node_modules')
+                    vscode.Uri.joinPath(extensionUri, 'media')
                 ]
             }
         );
@@ -164,31 +163,21 @@ export class PreviewPanel {
             vscode.Uri.joinPath(this._extensionUri, 'media', 'preview.js')
         );
 
-        // Local dependencies from node_modules
-        // Note: Paths must match exact structure in node_modules
+        // Vendored resources from media/vendor
         const katexCss = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'node_modules', 'katex', 'dist', 'katex.min.css')
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'katex', 'katex.min.css')
         );
         const katexJs = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'node_modules', 'katex', 'dist', 'katex.min.js')
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'katex', 'katex.min.js')
         );
-        // Highlight.js normally doesn't have a single browser file in root of npm package
-        // We look for it in the expected location or fallback to one that works
-        // Based on typical npm install, highlight.js common package has lib/index.js (node) 
-        // We will try finding a browser-compatible one or assume the user has internet for the fallback 
-        // BUT we are fixing "blank preview" which implies offline/CSP issues.
-        // Let's use the find command results if available, but for now assuming standard paths:
         const highlightCss = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'node_modules', 'highlight.js', 'styles', 'github.css')
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'github.min.css')
         );
-        // This file might need to be verified. If not found, highlighting will fail but preview should show.
-        // We'll leave it as is or try to use a safer path if we knew one.
-        // Ideally we should have downloaded highlight.min.js to media/, but let's try this.
         const highlightJs = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'node_modules', 'highlight.js', 'lib', 'common.js')
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'highlight.min.js')
         );
         const markedJs = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'node_modules', 'marked', 'marked.min.js')
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'marked.min.js')
         );
 
         // Escape content for safe embedding
