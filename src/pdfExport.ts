@@ -2,9 +2,39 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-// Static import to ensure bundler sees it.
-// We lazily use it, but import it to force inclusion.
-import * as puppeteerCore from 'puppeteer-core';
+
+// Lazy load puppeteer to avoid activation crash
+let puppeteer: typeof import('puppeteer-core') | undefined;
+
+function tryLoadPuppeteer(extensionUri: vscode.Uri): string | null {
+    if (puppeteer) return null;
+
+    const errors: string[] = [];
+
+    // 1. Try standard require
+    try {
+        puppeteer = require('puppeteer-core');
+        return null; // Success
+    } catch (e: any) {
+        errors.push(`Standard require failed: ${e.message}`);
+    }
+
+    // 2. Try absolute path from extension node_modules
+    try {
+        const localPath = path.join(extensionUri.fsPath, 'node_modules', 'puppeteer-core');
+        if (fs.existsSync(localPath)) {
+            puppeteer = require(localPath);
+            return null; // Success
+        } else {
+            errors.push(`Local path not found: ${localPath}`);
+        }
+    } catch (e: any) {
+        errors.push(`Local path require failed: ${e.message}`);
+    }
+
+    return errors.join(' | ');
+}
+
 
 function findChromePath(): string | undefined {
     const config = vscode.workspace.getConfiguration('markdownViewer');
@@ -142,9 +172,10 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
     const outputChannel = ext?.exports?.outputChannel;
     if (outputChannel) outputChannel.appendLine(`[${new Date().toISOString()}] Starting PDF export for ${document.fileName}`);
 
-    // Puppeteer should be available via static import
-    if (!puppeteerCore) {
-        vscode.window.showErrorMessage('PDF export requires "puppeteer-core". Dependency not loaded.');
+    // Attempt to load puppeteer
+    const loadError = tryLoadPuppeteer(extensionUri);
+    if (!puppeteer) {
+        vscode.window.showErrorMessage(`PDF export failed to load "puppeteer-core". Debug info: ${loadError}`);
         return;
     }
 
@@ -164,7 +195,7 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
             // Log Puppeteer logic
             if (outputChannel) outputChannel.appendLine('Launching Puppeteer...');
 
-            const browser = await puppeteerCore.launch({ headless: true, executablePath: chromePath, args: ['--no-sandbox'] });
+            const browser = await puppeteer!.launch({ headless: true, executablePath: chromePath, args: ['--no-sandbox'] });
             const page = await browser.newPage();
             const html = generateHtmlForPdf(document.getText(), extensionUri);
             await page.setContent(html, { waitUntil: ['networkidle0', 'domcontentloaded'], timeout: 60000 });
