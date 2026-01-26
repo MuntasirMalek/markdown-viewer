@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.45] - 2024-01-26
+
+### Fixed
+- **Reload Flicker Fix**: Fixed a massive bug where clicking between the editor and preview would cause the preview to reload (and reset scroll) every time. This created the illusion that sync was "flicking" or broken.
+- **Embedded Engine**: I moved the sync logic from an external file directly into the preview HTML. This guarantees it runs, bypassing any weird file-loading restrictions on your machine.
+- **Sync is still NUCLEAR**: It will still sync *all* files to be safe.
+
 ## [1.0.44] - 2024-01-26
 
 ### Fixed
