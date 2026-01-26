@@ -16,13 +16,12 @@
     --table-border: #dfe2e5;
 
     /* MPE Shared Texture (Solid Gray) */
-    /* Matches Img 0 and Img 4 from user screenshots */
     --texture-bg: #f1f1f1;
     --texture-border: #f1f1f1;
     --texture-text: #24292e;
 
-    /* Highlight - Light Pastel Yellow */
-    --highlight-bg: #fff5b1;
+    /* Highlight - Vibrant "Highlighter" Yellow */
+    --highlight-bg: #ffeb3b;
     --highlight-red-bg: #ff6b6b;
 
     /* Links */

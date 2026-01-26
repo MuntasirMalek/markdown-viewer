@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { exportToPdf } from './pdfExport';
 
 export class PreviewPanel {
     public static currentPanel: PreviewPanel | undefined;
@@ -66,7 +67,12 @@ export class PreviewPanel {
                         this._applyFormat(message.format, message.selectedText);
                         return;
                     case 'exportPdf':
-                        vscode.commands.executeCommand('markdown-viewer.exportPdf');
+                        // Fix: Export directly from current panel context to avoid lost focus issues
+                        if (this._currentDocument) {
+                            exportToPdf(this._extensionUri, this._currentDocument);
+                        } else {
+                            vscode.window.showWarningMessage('No document to export.');
+                        }
                         return;
                 }
             },
@@ -210,7 +216,6 @@ export class PreviewPanel {
         };
         
         renderer.blockquote = function(quote) {
-            // ... (rest of logic)
             const match = quote.match(/^<p>\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\]\\s*/i);
             if (match) {
                 const type = match[1].toLowerCase();
