@@ -1,0 +1,358 @@
+/* ===== CSS Variables ===== */
+:root {
+    /* Preview (white/light) */
+    --bg-preview: #ffffff;
+    --text-preview: #24292e;
+    --text-preview-secondary: #6a737d;
+    --preview-border: #eaecef;
+
+    /* Code in preview */
+    --code-bg: #f6f8fa;
+    --code-border: #d0d7de;
+
+    /* Table colors */
+    --table-header-bg: #f6f8fa;
+    --table-row-alt: #f6f8fa;
+    --table-border: #d0d7de;
+
+    /* Blockquote */
+    --blockquote-border: #d0d7de;
+    --blockquote-bg: #f6f8fa;
+
+    /* Highlight */
+    --highlight-bg: #ffe135;
+    --highlight-red-bg: #ff6b6b;
+
+    /* Links */
+    --link-color: #0969da;
+
+    /* Toolbar */
+    --toolbar-bg: #2d2d30;
+    --toolbar-border: #3c3c3c;
+}
+
+/* ===== Reset & Base ===== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background: var(--bg-preview);
+    color: var(--text-preview);
+}
+
+/* ===== Custom Scrollbar ===== */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f0f0f0;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* ===== Preview Content ===== */
+.preview-content {
+    height: 100vh;
+    overflow-y: auto;
+    padding: 24px 32px;
+    line-height: 1.6;
+}
+
+/* ===== Typography ===== */
+h1, h2, h3, h4, h5, h6 {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--text-preview);
+}
+
+h1:first-child,
+h2:first-child,
+h3:first-child {
+    margin-top: 0;
+}
+
+h1 {
+    font-size: 2em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--preview-border);
+}
+
+h2 {
+    font-size: 1.5em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--preview-border);
+}
+
+h3 {
+    font-size: 1.25em;
+}
+
+h4 {
+    font-size: 1em;
+}
+
+h5 {
+    font-size: 0.875em;
+}
+
+h6 {
+    font-size: 0.85em;
+    color: var(--text-preview-secondary);
+}
+
+p {
+    margin-bottom: 16px;
+}
+
+/* ===== Links ===== */
+a {
+    color: var(--link-color);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* ===== Code ===== */
+code {
+    background: var(--code-bg);
+    padding: 0.2em 0.4em;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+}
+
+pre {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 6px;
+    padding: 16px;
+    overflow-x: auto;
+    margin-bottom: 16px;
+}
+
+pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-size: 0.875em;
+    line-height: 1.5;
+}
+
+/* ===== Blockquotes ===== */
+blockquote {
+    padding: 0.5em 1em;
+    margin: 0 0 16px;
+    border-left: 4px solid var(--blockquote-border);
+    background: var(--blockquote-bg);
+    color: var(--text-preview-secondary);
+}
+
+blockquote p:last-child {
+    margin-bottom: 0;
+}
+
+/* ===== Lists ===== */
+ul, ol {
+    margin-bottom: 16px;
+    padding-left: 2em;
+}
+
+li {
+    margin-bottom: 4px;
+}
+
+li > ul,
+li > ol {
+    margin-top: 4px;
+    margin-bottom: 0;
+}
+
+/* ===== Tables ===== */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 16px;
+    overflow-x: auto;
+    display: block;
+}
+
+th, td {
+    border: 1px solid var(--table-border);
+    padding: 8px 12px;
+    text-align: left;
+}
+
+th {
+    background: var(--table-header-bg);
+    font-weight: 600;
+}
+
+tr:nth-child(even) {
+    background: var(--table-row-alt);
+}
+
+/* ===== Horizontal Rules ===== */
+hr {
+    border: none;
+    border-top: 1px solid var(--preview-border);
+    margin: 24px 0;
+}
+
+/* ===== Images ===== */
+img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+}
+
+/* ===== Highlights ===== */
+mark {
+    background: var(--highlight-bg);
+    padding: 0.1em 0.2em;
+    border-radius: 2px;
+    color: inherit;
+}
+
+mark.red-highlight {
+    background: var(--highlight-red-bg);
+    color: #fff;
+}
+
+/* ===== Math ===== */
+.katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px 0;
+    margin: 16px 0;
+}
+
+.math-error {
+    color: #d73a49;
+    background: #ffeef0;
+    padding: 0.2em 0.4em;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+/* ===== Task Lists ===== */
+.task-list-item {
+    list-style-type: none;
+}
+
+.task-list-item input[type="checkbox"] {
+    margin-right: 0.5em;
+}
+
+/* ===== Floating Toolbar ===== */
+.floating-toolbar {
+    position: fixed;
+    display: flex;
+    gap: 4px;
+    padding: 6px 8px;
+    background: var(--toolbar-bg);
+    border: 1px solid var(--toolbar-border);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(5px);
+    transition: opacity 0.15s, visibility 0.15s, transform 0.15s;
+    z-index: 1000;
+}
+
+.floating-toolbar.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.floating-toolbar button {
+    background: transparent;
+    border: none;
+    padding: 6px 10px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #d4d4d4;
+    transition: background 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.floating-toolbar button:hover {
+    background: #3c3c3c;
+}
+
+.floating-toolbar button:active {
+    background: #4c4c4c;
+}
+
+/* ===== Selection highlight ===== */
+::selection {
+    background: rgba(9, 105, 218, 0.3);
+}
+
+/* ===== Line highlighting for scroll sync ===== */
+[data-line] {
+    scroll-margin-top: 20px;
+}
+
+/* ===== Dark mode support ===== */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-preview: #1e1e1e;
+        --text-preview: #d4d4d4;
+        --text-preview-secondary: #9e9e9e;
+        --preview-border: #3c3c3c;
+        --code-bg: #2d2d30;
+        --code-border: #3c3c3c;
+        --table-header-bg: #2d2d30;
+        --table-row-alt: #252526;
+        --table-border: #3c3c3c;
+        --blockquote-border: #3c3c3c;
+        --blockquote-bg: #252526;
+        --link-color: #58a6ff;
+    }
+}
+
+/* VS Code theme integration */
+body.vscode-dark {
+    --bg-preview: #1e1e1e;
+    --text-preview: #d4d4d4;
+    --text-preview-secondary: #9e9e9e;
+    --preview-border: #3c3c3c;
+    --code-bg: #2d2d30;
+    --code-border: #3c3c3c;
+    --table-header-bg: #2d2d30;
+    --table-row-alt: #252526;
+    --table-border: #3c3c3c;
+    --blockquote-border: #3c3c3c;
+    --blockquote-bg: #252526;
+    --link-color: #58a6ff;
+}
+
+body.vscode-high-contrast {
+    --bg-preview: #000000;
+    --text-preview: #ffffff;
+    --preview-border: #ffffff;
+}

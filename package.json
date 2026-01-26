@@ -1,0 +1,137 @@
+{
+  "name": "markdown-viewer-enhanced",
+  "displayName": "Markdown Viewer Enhanced",
+  "description": "Live Markdown preview with KaTeX math, syntax highlighting, floating toolbar, and PDF export via Puppeteer",
+  "version": "1.0.0",
+  "publisher": "utsho",
+  "author": {
+    "name": "Utsho"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MuntasirMalek/Test"
+  },
+  "bugs": {
+    "url": "https://github.com/MuntasirMalek/Test/issues"
+  },
+  "homepage": "https://github.com/MuntasirMalek/Test#readme",
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "markdown",
+    "preview",
+    "latex",
+    "katex",
+    "math",
+    "pdf",
+    "export",
+    "puppeteer",
+    "syntax highlighting"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "markdown-viewer.preview",
+        "title": "Markdown Viewer: Open Preview",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "markdown-viewer.exportPdf",
+        "title": "Markdown Viewer: Export to PDF",
+        "icon": "$(file-pdf)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "resourceLangId == markdown",
+          "command": "markdown-viewer.preview",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "when": "resourceLangId == markdown",
+          "command": "markdown-viewer.preview",
+          "group": "navigation"
+        },
+        {
+          "when": "resourceLangId == markdown",
+          "command": "markdown-viewer.exportPdf",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "markdown-viewer.preview",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "resourceLangId == markdown"
+      },
+      {
+        "command": "markdown-viewer.exportPdf",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "resourceLangId == markdown"
+      }
+    ],
+    "configuration": {
+      "title": "Markdown Viewer Enhanced",
+      "properties": {
+        "markdownViewer.chromePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Chrome/Chromium executable for PDF export. Leave empty for auto-detection."
+        },
+        "markdownViewer.pdfPageSize": {
+          "type": "string",
+          "default": "A4",
+          "enum": [
+            "A4",
+            "Letter",
+            "Legal",
+            "A3",
+            "A5"
+          ],
+          "description": "Page size for PDF export"
+        },
+        "markdownViewer.pdfMargin": {
+          "type": "string",
+          "default": "20mm",
+          "description": "Margin for PDF export (e.g., '20mm', '1in')"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "puppeteer-core": "^22.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}
