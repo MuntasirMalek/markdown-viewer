@@ -20,8 +20,11 @@ export class PreviewPanel {
         const column = vscode.ViewColumn.Beside;
         if (PreviewPanel.currentPanel) {
             PreviewPanel.currentPanel._panel.reveal(column);
-            PreviewPanel.currentPanel._currentDocument = document;
-            PreviewPanel.currentPanel._update();
+            // Don't update content if it's the same, to avoid re-render flicker
+            if (PreviewPanel.currentPanel._currentDocument?.fileName !== document.fileName) {
+                PreviewPanel.currentPanel._currentDocument = document;
+                PreviewPanel.currentPanel._update();
+            }
             return;
         }
         const panel = vscode.window.createWebviewPanel(
@@ -39,6 +42,11 @@ export class PreviewPanel {
 
     public static updateContent(document: vscode.TextDocument) {
         if (PreviewPanel.currentPanel) {
+            // FIX: Prevent unnecessary re-renders on focus switch
+            if (PreviewPanel.currentPanel._currentDocument?.uri.toString() === document.uri.toString()) {
+                // Same doc, do nothing (prevents scroll reset)
+                return;
+            }
             PreviewPanel.currentPanel._currentDocument = document;
             PreviewPanel.currentPanel._update();
         }
@@ -46,7 +54,12 @@ export class PreviewPanel {
 
     public static syncScroll(line: number, totalLines?: number) {
         if (PreviewPanel.currentPanel) {
-            PreviewPanel.currentPanel._panel.webview.postMessage({ type: 'scrollTo', line: line, totalLines: totalLines });
+            PreviewPanel.currentPanel._panel.webview.postMessage({ type: 'scrollTo', line: line, totalLines: totalLines })
+                .then(success => {
+                    if (!success) {
+                        // console.error('Failed to post message to webview');
+                    }
+                });
         }
     }
 
@@ -169,7 +182,7 @@ export class PreviewPanel {
     private _getHtmlForWebview(webview: vscode.Webview): string {
         const content = this._currentDocument?.getText() || '';
         const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'preview.css'));
-        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'preview.js'));
+        // removed scriptUri - embedding directly
         const katexCss = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'katex', 'katex.min.css'));
         const katexJs = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'katex', 'katex.min.js'));
         const highlightCss = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'github.min.css'));
@@ -177,6 +190,134 @@ export class PreviewPanel {
         const markedJs = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'marked.min.js'));
         const githubCss = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'github-markdown.css'));
         const escapedContent = this._escapeHtml(content);
+
+        // INLINED JS for reliability
+        const inlineScript = `
+        const vscode = acquireVsCodeApi();
+
+        // Toggle Red Flash for debugging
+        function flashDebug() {
+            document.body.style.backgroundColor = '#ffcccc'; // Light Red
+            setTimeout(() => {
+                document.body.style.backgroundColor = '';
+            }, 100);
+            document.body.classList.add('is-syncing');
+            setTimeout(() => {
+                document.body.classList.remove('is-syncing');
+            }, 200);
+        }
+
+        let ignoreNextScroll = false;
+        let lastSyncSend = 0;
+
+        const scrollHandler = (e) => {
+            if (ignoreNextScroll) {
+                ignoreNextScroll = false;
+                return;
+            }
+            const now = Date.now();
+            if (now - lastSyncSend < 50) return; 
+            lastSyncSend = now;
+
+            const elements = document.querySelectorAll('[data-line]');
+            if (elements.length === 0) return;
+
+            const centerY = window.scrollY + (window.innerHeight / 2);
+            let bestLine = -1;
+            let minDist = Infinity;
+
+            for (const el of elements) {
+                const rect = el.getBoundingClientRect(); 
+                const absTop = window.scrollY + rect.top;
+                const dist = Math.abs(absTop - centerY);
+                if (dist < minDist) {
+                    minDist = dist;
+                    bestLine = parseInt(el.getAttribute('data-line'));
+                }
+            }
+            if (bestLine >= 0) {
+                vscode.postMessage({ type: 'revealLine', line: bestLine });
+            }
+        };
+
+        window.addEventListener('scroll', scrollHandler, { capture: true });
+
+        window.addEventListener('message', event => {
+            const message = event.data;
+            if (message.type === 'scrollTo') {
+                flashDebug();
+                const line = message.line;
+                const newTargetY = calculateTargetY(line, message.totalLines);
+                if (!isNaN(newTargetY)) {
+                    ignoreNextScroll = true;
+                    window.scrollTo({ top: newTargetY, behavior: 'auto' });
+                }
+            } else if (message.type === 'applyFormat') {
+                // handle format logic if needed here or keep minimal
+            }
+        });
+
+        function calculateTargetY(line, totalLines) {
+            const exactEl = document.querySelector(\`[data-line="\${line}"]\`);
+            if (exactEl) {
+                 return exactEl.offsetTop - (window.innerHeight / 2) + (exactEl.clientHeight / 2);
+            }
+            // Fallback interpolation logic
+            const elements = Array.from(document.querySelectorAll('[data-line]'));
+            if (elements.length > 0) {
+                 const sorted = elements.map(el => ({
+                     line: parseInt(el.getAttribute('data-line')),
+                     top: el.offsetTop
+                 })).sort((a, b) => a.line - b.line);
+                 let before = null, after = null;
+                 for (const item of sorted) {
+                     if (item.line <= line) before = item;
+                     else { after = item; break; }
+                 }
+                 if (before && after) {
+                      const ratio = (line - before.line) / (after.line - before.line);
+                      return before.top + (after.top - before.top) * ratio - (window.innerHeight / 2);
+                 } else if (before) return before.top - (window.innerHeight / 2);
+                 else if (after) return 0;
+            } else if (totalLines) {
+                 return (line / totalLines) * document.body.scrollHeight;
+            }
+            return 0;
+        }
+        
+        // Toolbar Logic
+        document.addEventListener('mouseup', event => {
+            const selection = window.getSelection();
+            const toolbar = document.getElementById('floatingToolbar');
+            if (selection && selection.toString().trim().length > 0) {
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+                toolbar.style.top = \`\${window.scrollY + rect.top - 50}px\`;
+                toolbar.style.left = \`\${rect.left}px\`;
+                toolbar.classList.add('visible');
+                toolbar.dataset.selectedText = selection.toString();
+            } else {
+                if (!toolbar.contains(event.target)) toolbar.classList.remove('visible');
+            }
+        });
+        
+        function applyToolbarFormat(format) {
+            const toolbar = document.getElementById('floatingToolbar');
+            if (toolbar.dataset.selectedText) {
+                vscode.postMessage({ type: 'applyFormat', format: format, selectedText: toolbar.dataset.selectedText });
+                toolbar.classList.remove('visible');
+                window.getSelection().removeAllRanges();
+            }
+        }
+        function exportPdf() { vscode.postMessage({ type: 'exportPdf' }); }
+        
+        document.getElementById('boldBtn').onclick = () => applyToolbarFormat('bold');
+        document.getElementById('highlightBtn').onclick = () => applyToolbarFormat('highlight');
+        document.getElementById('redHighlightBtn').onclick = () => applyToolbarFormat('red-highlight');
+        document.getElementById('deleteBtn').onclick = () => applyToolbarFormat('delete');
+        // FAB
+        document.querySelector('.fab-export').onclick = () => exportPdf();
+        `;
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -241,16 +382,18 @@ export class PreviewPanel {
         <button id="deleteBtn" title="Delete">🗑️</button>
     </div>
     <script id="markdown-content" type="text/plain">${escapedContent}</script>
-    <script src="${scriptUri}"></script>
     <script>
-        // Updated: Safer Regex that triggers on any partial match after stripping whitespace
+        ${inlineScript}
+    </script>
+    <script>
+        // Updated regex
         function _inlineAddLineAttributes(sourceLines) {
             const preview = document.getElementById('preview');
             const usedLines = new Set();
             const blockElements = preview.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote > p, pre, .katex-display, table, .emoji-warning');
             blockElements.forEach(el => {
                 const elText = el.textContent.trim();
-                const cleanElText = elText.replace(/\\s+/g, ''); // Simple whitespace strip
+                const cleanElText = elText.replace(/\\s+/g, '');
                 if (cleanElText.length < 2) return;
 
                 for (let i = 0; i < sourceLines.length; i++) {
@@ -322,10 +465,6 @@ export class PreviewPanel {
         document.getElementById('preview').innerHTML = renderMarkdown(raw);
         
         _inlineAddLineAttributes(raw.split('\\n'));
-        
-        if (!window._messageListenerAttached) {
-             window._messageListenerAttached = true;
-        }
     </script>
 </body>
 </html>`;
