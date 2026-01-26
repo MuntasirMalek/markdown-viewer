@@ -54,20 +54,23 @@ function exportPdf() {
 }
 
 // ============================================
-// ANIMATION ENGINE: Physics-based, Interruptible
+// ANIMATION ENGINE: Lerp Loop (Game Style)
 // ============================================
 
-let userInteracting = false;
 let animationFrameId = null;
+let targetScrollY = window.scrollY; // The goal
+let isAutoScrolling = false;
 
-// Detecting User Interaction to kill auto-scroll
+// Kill Switch
 const killScroll = () => {
-    if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-        animationFrameId = null;
+    if (isAutoScrolling) {
+        isAutoScrolling = false;
+        targetScrollY = window.scrollY; // Reset target to current to stop drift
+        if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
     }
-    userInteracting = true;
-    setTimeout(() => { userInteracting = false; }, 200); // Debounce interaction flag
 };
 
 window.addEventListener('mousedown', killScroll);
@@ -75,39 +78,41 @@ window.addEventListener('wheel', killScroll, { passive: true });
 window.addEventListener('touchstart', killScroll, { passive: true });
 window.addEventListener('keydown', killScroll);
 
-// Smooth Scroll Function (Custom Easing)
-function smoothScrollTo(targetY) {
-    if (userInteracting) return;
+function startScrollLoop() {
+    if (animationFrameId) return; // Already running
 
-    const startY = window.scrollY;
-    const distance = targetY - startY;
-    const startTime = performance.now();
-    const duration = 400; // ms
-
-    // Quadratic Ease-out
-    const easeOutQuad = (t) => t * (2 - t);
-
-    // Cancel previous
-    if (animationFrameId) cancelAnimationFrame(animationFrameId);
-
-    function step(currentTime) {
-        if (userInteracting) return; // Kill switch
-
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        const ease = easeOutQuad(progress);
-
-        window.scrollTo(0, startY + (distance * ease));
-
-        if (progress < 1) {
-            animationFrameId = requestAnimationFrame(step);
-        } else {
+    function loop() {
+        if (!isAutoScrolling) {
             animationFrameId = null;
+            return;
         }
+
+        const currentY = window.scrollY;
+
+        // Linear Interpolation: Move 20% of the distance each frame
+        // This creates a natural "slide" that slows down as it arrives.
+        // It handles rapid target updates perfectly (just changes direction).
+        const diff = targetScrollY - currentY;
+
+        if (Math.abs(diff) < 1) {
+            // Arrived
+            window.scrollTo(0, targetScrollY);
+            isAutoScrolling = false;
+            animationFrameId = null;
+            return;
+        }
+
+        // Speed factor: 0.2 = fast smooth, 0.1 = slow smooth
+        const nextY = currentY + (diff * 0.2);
+        window.scrollTo(0, nextY);
+
+        animationFrameId = requestAnimationFrame(loop);
     }
 
-    animationFrameId = requestAnimationFrame(step);
+    isAutoScrolling = true;
+    loop();
 }
+
 
 // ============================================
 // SYNC LOGIC
@@ -117,8 +122,8 @@ let lastSyncSend = 0;
 
 // 1. Preview -> Editor (User Scrolled Preview)
 const scrollHandler = () => {
-    // If we are auto-scrolling, DO NOT sync back to editor (prevents echo)
-    if (animationFrameId !== null) return;
+    // If auto-scrolling, ignore
+    if (isAutoScrolling) return;
 
     const now = Date.now();
     if (now - lastSyncSend < 50) return; // Throttle 20fps
@@ -127,7 +132,7 @@ const scrollHandler = () => {
     const elements = document.querySelectorAll('[data-line]');
     if (elements.length === 0) return;
 
-    // Use absolute center
+    // Center-biased detection
     const centerY = window.scrollY + (window.innerHeight / 2);
     let bestLine = -1;
     let minDist = Infinity;
@@ -161,13 +166,13 @@ window.addEventListener('message', event => {
         const totalLines = message.totalLines;
 
         // Calculate Target Y
-        let targetY = 0;
+        let newTargetY = 0;
 
         // Exact Match
         const exactEl = document.querySelector(`[data-line="${line}"]`);
         if (exactEl) {
             // Center Align
-            targetY = exactEl.offsetTop - (window.innerHeight / 2) + (exactEl.clientHeight / 2);
+            newTargetY = exactEl.offsetTop - (window.innerHeight / 2) + (exactEl.clientHeight / 2);
         } else {
             // Interpolation
             const elements = Array.from(document.querySelectorAll('[data-line]'));
@@ -194,18 +199,23 @@ window.addEventListener('message', event => {
                 } else if (after) {
                     rawY = 0;
                 }
-                targetY = rawY - (window.innerHeight / 2); // Center
+                newTargetY = rawY - (window.innerHeight / 2); // Center
             } else if (totalLines) {
                 // Percentage
                 const pct = line / totalLines;
-                targetY = pct * document.body.scrollHeight;
+                newTargetY = pct * document.body.scrollHeight;
             }
         }
 
         // Bounds Check
-        targetY = Math.max(0, Math.min(targetY, document.body.scrollHeight - window.innerHeight));
+        newTargetY = Math.max(0, Math.min(newTargetY, document.body.scrollHeight - window.innerHeight));
 
-        // EXECUTE CUSTOM SCROLL
-        smoothScrollTo(targetY);
+        // Update Target (Game Loop handles the rest)
+        targetScrollY = newTargetY;
+
+        // Start loop if not running
+        if (!isAutoScrolling) {
+            startScrollLoop();
+        }
     }
 });
