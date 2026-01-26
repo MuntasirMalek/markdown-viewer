@@ -162,14 +162,20 @@ export class PreviewPanel {
         .toolbar-btn:hover { background: var(--vscode-button-hoverBackground); }
         .katex-display { overflow-x: auto; overflow-y: hidden; }
         
-        /* Safe Inline Warning Style */
+        /* Magic Auto-Alert: Exact MPE Style Imitation */
         .emoji-warning {
-            background-color: #fff8c5;
-            color: #24292f;
-            padding: 2px 5px;
-            border-radius: 3px;
-            /* No borders or blocks to prevent layout break */
+            display: inline-block; /* Magic Bullet: behaves like block but valid inline */
+            width: 95%; /* Make it span almost full width */
+            background-color: #fff5b1;
+            color: #24292e;
+            padding: 8px 12px;
+            border-left: 4px solid #e3b341;
+            border-radius: 0 2px 2px 0;
+            margin: 4px 0;
+            white-space: normal; /* Allow text wrapping */
         }
+        /* Restore italics if they were stripped or nested */
+        .emoji-warning em { font-style: normal; font-weight: 500; }
     </style>
 </head>
 <body>
@@ -193,10 +199,9 @@ export class PreviewPanel {
                 text = text.replace(/==([^=]+)==/g, '<mark>$1</mark>');
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
                 
-                // Safe Inline Auto-Alert
+                // MPE-style Auto-Alert with inline-block
                 if (text.includes('⚠️')) {
-                     // Only wrap the part after emoji if possible, or whole line
-                     // Simple safe wrap: Replace "⚠️ text..." with styled span
+                     // Regex to capture line content starting with ⚠️
                      text = text.replace(/(⚠️\s*[^<\\n]+)/g, '<span class="emoji-warning">$1</span>');
                 }
             }

@@ -64,12 +64,19 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
         @page { size: A4; margin: 20mm; }
         .katex-display { overflow-x: auto; overflow-y: hidden; }
         pre { background-color: #f6f8fa !important; }
+        /* Magic Auto-Alert for PDF */
         .emoji-warning {
-            background-color: #fff8c5;
+            display: inline-block;
+            width: 95%;
+            background-color: #fff5b1;
             color: #24292f;
-            padding: 2px 5px;
-            border-radius: 3px;
+            padding: 8px 12px;
+            border-left: 4px solid #e3b341;
+            border-radius: 0 2px 2px 0;
+            margin: 4px 0;
+            white-space: normal;
         }
+        .emoji-warning em { font-style: normal; font-weight: 500; }
     </style>
 </head>
 <body>
