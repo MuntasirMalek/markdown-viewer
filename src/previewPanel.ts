@@ -5,6 +5,12 @@ import { exportToPdf } from './pdfExport';
 
 export class PreviewPanel {
     public static currentPanel: PreviewPanel | undefined;
+
+    // SYNC LOCK (Bi-Directional)
+    // When true, the extension ignores scroll events from the editor
+    // because they are likely caused by the preview syncing the editor.
+    public static isSyncingFromPreview = false;
+
     private static readonly viewType = 'markdownViewerPreview';
 
     private readonly _panel: vscode.WebviewPanel;
@@ -75,7 +81,7 @@ export class PreviewPanel {
                     case 'alert':
                         vscode.window.showInformationMessage(message.text);
                         return;
-                    case 'error': // ERROR REPORTING
+                    case 'error':
                         vscode.window.showErrorMessage(`Preview Error: ${message.text}`);
                         return;
                     case 'applyFormat':
@@ -89,6 +95,7 @@ export class PreviewPanel {
                         }
                         return;
                     case 'revealLine':
+                        // Rate limit slightly
                         if (Date.now() - this._lastScrollTime > 50) {
                             this._revealLineInEditor(message.line);
                             this._lastScrollTime = Date.now();
@@ -107,8 +114,16 @@ export class PreviewPanel {
             e => e.document.uri.toString() === this._currentDocument?.uri.toString()
         );
         if (editor) {
+            // SET LOCK
+            PreviewPanel.isSyncingFromPreview = true;
+
             const range = new vscode.Range(line, 0, line, 0);
             editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+
+            // RELEASE LOCK (After animation settles)
+            setTimeout(() => {
+                PreviewPanel.isSyncingFromPreview = false;
+            }, 600); // 600ms to be safe
         }
     }
 
@@ -187,16 +202,14 @@ export class PreviewPanel {
         const githubCss = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'github-markdown.css'));
         const escapedContent = this._escapeHtml(content);
 
-        // INLINED JS: Native Scroll + Error Handling
         const inlineScript = `
         const vscode = acquireVsCodeApi();
 
-        // GLOBAL ERROR HANDLER
         window.onerror = function(message, source, lineno, colno, error) {
             vscode.postMessage({ type: 'error', text: \`\${message} at line \${lineno}\` });
         };
 
-        let ignoreSyncUntil = 0; // Timestamp lock for anti-echo
+        let ignoreSyncUntil = 0; 
         let lastSyncSend = 0;
 
         const scrollHandler = (e) => {
@@ -235,10 +248,7 @@ export class PreviewPanel {
                 const line = message.line;
                 const newTargetY = calculateTargetY(line, message.totalLines);
                 if (!isNaN(newTargetY)) {
-                    // LOCK OUTGOING SYNC
                     ignoreSyncUntil = Date.now() + 500;
-                    
-                    // NATIVE SCROLL (Robust)
                     window.scrollTo({ top: newTargetY, behavior: 'auto' });
                 }
             } else if (message.type === 'applyFormat') {

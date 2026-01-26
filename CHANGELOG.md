@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.49] - 2024-01-26
+
+### Fixed
+- **Bi-Directional Lock**: Fixed the root cause of the "Jitter". When you scrolled the preview, it scrolled the editor, which *then scrolled the preview back*. I added a "Lock" so the editor knows when it's being scrolled by the preview and stays silent. 
+- **Throttle + Lock**: Combined with the 50ms throttle, this should result in a rock-solid, crash-free, jitter-free experience.
+
 ## [1.0.48] - 2024-01-26
 
 ### Fixed
