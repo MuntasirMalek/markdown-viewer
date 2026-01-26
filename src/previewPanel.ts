@@ -175,9 +175,6 @@ export class PreviewPanel {
             white-space: normal;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
         }
-        .emoji-warning em { font-style: normal; font-weight: 500; }
-        
-        /* Ensure emoji itself is readable if distinct */
         .emoji-warning-icon { margin-right: 6px; }
     </style>
 </head>
@@ -199,10 +196,12 @@ export class PreviewPanel {
         renderer.text = function(token) {
             let text = token.text || token;
             if (typeof text === 'string') {
+                // Restore Highlighter ==text==
+                text = text.replace(/==([^=]+)==/g, '<mark>$1</mark>');
+                
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
                 
                 // MPE-style Auto-Alert: Restoring Emoji ⚠️
-                // Stop replacing with matching '!' text. Show the emoji.
                 if (text.includes('⚠️')) {
                      text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning">$1 $2</span>');
                 }
