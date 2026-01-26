@@ -242,7 +242,7 @@ export class PreviewPanel {
                 const newTargetY = calculateTargetY(line, totalLines);
                 
                 if (!isNaN(newTargetY)) {
-                    ignoreSyncUntil = Date.now() + 500;
+                    ignoreSyncUntil = Date.now() + 500; // Increased Lock time
                     window.scrollTo({ top: newTargetY, behavior: 'auto' });
                 }
             } else if (message.type === 'applyFormat') {
@@ -251,44 +251,66 @@ export class PreviewPanel {
         });
 
         function calculateTargetY(line, totalLines) {
-            // 1. Try EXACT Matching
-            const exactEl = document.querySelector(\`[data-line="\${line}"]\`);
-            if (exactEl) {
-                 return exactEl.offsetTop - (window.innerHeight / 2) + (exactEl.clientHeight / 2);
-            }
-            
-            // 2. Try INTERPOLATION Matching
-            const elements = Array.from(document.querySelectorAll('[data-line]'));
-            if (elements.length > 0) {
-                 const sorted = elements.map(el => ({
-                     line: parseInt(el.getAttribute('data-line')),
-                     top: el.offsetTop
-                 })).sort((a, b) => a.line - b.line);
-                 let before = null, after = null;
-                 for (const item of sorted) {
-                     if (item.line <= line) before = item;
-                     else { after = item; break; }
-                 }
-                 if (before && after) {
-                      const ratio = (line - before.line) / (after.line - before.line);
-                      return before.top + (after.top - before.top) * ratio - (window.innerHeight / 2);
-                 } else if (before) return before.top - (window.innerHeight / 2);
-                 else if (after) return 0;
-            } 
-            
-            // 3. PERCENTAGE FALLBACK (CRITICAL FIX)
-            // If text matching failed, just use pure math.
+            const documentHeight = document.body.scrollHeight;
+            const windowHeight = window.innerHeight;
+
+            // 1. Calculate Pure Percentage Target
+            let percentageTarget = 0;
             if (totalLines > 0) {
-                 const percentage = line / totalLines;
-                 const scrollHeight = document.body.scrollHeight;
-                 // Add logic to clamp
-                 if (scrollHeight > window.innerHeight) {
-                    return percentage * (scrollHeight - window.innerHeight);
-                 }
-                 return 0;
+                const percentage = line / totalLines;
+                percentageTarget = percentage * (documentHeight - windowHeight);
+                if (percentageTarget < 0) percentageTarget = 0;
+            }
+
+            // 2. Try DATA-LINE Matching
+            const exactEl = document.querySelector(\`[data-line="\${line}"]\`);
+            let matchedTarget = -1;
+
+            if (exactEl) {
+                 matchedTarget = exactEl.offsetTop - (windowHeight / 2) + (exactEl.clientHeight / 2);
+            } else {
+                // Interpolation
+                const elements = Array.from(document.querySelectorAll('[data-line]'));
+                if (elements.length > 0) {
+                     const sorted = elements.map(el => ({
+                         line: parseInt(el.getAttribute('data-line')),
+                         top: el.offsetTop
+                     })).sort((a, b) => a.line - b.line);
+                     
+                     let before = null, after = null;
+                     for (const item of sorted) {
+                         if (item.line <= line) before = item;
+                         else { after = item; break; }
+                     }
+                     
+                     if (before && after) {
+                          // Check GAP size
+                          // If the gap is huge (e.g. > 50 lines), the interpolation might be way off (jumping sections)
+                          if ((after.line - before.line) < 50) {
+                              const ratio = (line - before.line) / (after.line - before.line);
+                              matchedTarget = before.top + (after.top - before.top) * ratio - (windowHeight / 2);
+                          }
+                     } else if (before) {
+                          if ((line - before.line) < 20) {
+                              matchedTarget = before.top - (windowHeight / 2);
+                          }
+                     }
+                }
             }
             
-            return 0;
+            // 3. HYBRID DECISION
+            // If we have a good matched target, use it.
+            if (matchedTarget !== -1) {
+                // But if matched target is suspiciously far from percentage target (e.g. > 1 screen height),
+                // it might be a false positive (matching 'the' in a different section).
+                // Let's trust the match, BUT blend it if stats are weak. 
+                // Actually, for now, TRUST MATCH unless it's null.
+                return matchedTarget;
+            }
+            
+            // 4. FALLBACK TO PERCENTAGE
+            // If data-line failed or gap was too big, use percentage.
+            return percentageTarget;
         }
         
         // Toolbar Logic
@@ -394,18 +416,19 @@ export class PreviewPanel {
         function _inlineAddLineAttributes(sourceLines) {
             const preview = document.getElementById('preview');
             const usedLines = new Set();
+            // Expanded query selector to include spans (some inline elements might wrap)
             const blockElements = preview.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote > p, pre, .katex-display, table, .emoji-warning');
             blockElements.forEach(el => {
                 const elText = el.textContent.trim();
                 const cleanElText = elText.replace(/\\s+/g, '');
-                if (cleanElText.length < 2) return;
+                // Removed length check to support short bullets
+                if (cleanElText.length === 0) return;
 
                 for (let i = 0; i < sourceLines.length; i++) {
                      if (usedLines.has(i)) continue;
                      const srcLine = sourceLines[i];
                      const cleanSrcLine = srcLine.replace(/\\s+/g, '');
                      
-                     // RELAXED MATCHING (Includes)
                      if (cleanSrcLine.includes(cleanElText) || cleanElText.includes(cleanSrcLine)) {
                          el.setAttribute('data-line', i);
                          usedLines.add(i);
