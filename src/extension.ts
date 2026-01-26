@@ -6,7 +6,7 @@ import { exportToPdf } from './pdfExport';
 export function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
     context.subscriptions.push(outputChannel);
-    outputChannel.appendLine('Extension Activation Started (v1.0.46).');
+    outputChannel.appendLine('Extension Activation Started (v1.0.47).');
 
     // Status Bar Item for Sync Health
     const syncStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -55,37 +55,20 @@ export function activate(context: vscode.ExtensionContext) {
 
     const scrollListener = vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
         if (event.textEditor.document.languageId === 'markdown') {
-            const currentDoc = PreviewPanel.currentDocument;
+            // NUCLEAR OPTION 2.0: NO VALIDATION (Removed all checks)
+            // If a markdown file scrolls, we sync it. 
+            // Logic: The "Reload Fix" in v1.0.45 protects us from scroll resets.
 
-            // RESTORED VALIDATION LOGIC (Case Insensitive + Basename Fallback)
-            // We need this to prevent chaos if user has multiple files.
-            let shouldSync = false;
+            const visibleRange = event.visibleRanges[0];
+            if (visibleRange) {
+                PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
+                syncStatusItem.text = `$(check) MD Sync: Active (Nuclear)`;
+                syncStatusItem.show();
 
-            if (currentDoc) {
-                const eventPath = event.textEditor.document.uri.fsPath.toLowerCase();
-                const previewPath = currentDoc.uri.fsPath.toLowerCase();
-                const eventBase = path.basename(eventPath);
-                const previewBase = path.basename(previewPath);
-
-                if (eventPath === previewPath) {
-                    shouldSync = true;
-                } else if (eventBase === previewBase) {
-                    shouldSync = true;
-                }
-            }
-
-            if (shouldSync) {
-                const visibleRange = event.visibleRanges[0];
-                if (visibleRange) {
-                    PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
-                    syncStatusItem.text = `$(check) MD Sync: Active`;
-                    syncStatusItem.show();
-                }
-            } else {
-                if (currentDoc) {
-                    syncStatusItem.text = `$(alert) MD Sync: Mismatch`;
-                    syncStatusItem.show();
-                }
+                // Reset status for feedback
+                setTimeout(() => {
+                    syncStatusItem.text = `$(check) MD Sync: Ready`;
+                }, 500);
             }
         }
     });

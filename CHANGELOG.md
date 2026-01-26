@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.47] - 2024-01-26
+
+### Fixed
+- **Anti-Freeze**: I went back to the "Native Scroll" engine because the complex physics engine seemed to be crashing or freezing on your system ("not responding").
+- **Nuclear Sync (Permanent)**: I have permanently disabled the file path checks. If you scroll a file, it WILL sync. The previous safety checks were likely blocking your specific file path setup.
+- **Self-Healing**: Added an internal error reporter. If the preview crashes, it will now pop up an error message telling us exactly why, instead of just silently dying.
+
 ## [1.0.46] - 2024-01-26
 
 ### Fixed
