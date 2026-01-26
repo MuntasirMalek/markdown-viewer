@@ -161,6 +161,15 @@ export class PreviewPanel {
         .toolbar-btn { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 4px 12px; border-radius: 2px; cursor: pointer; font-size: 12px; }
         .toolbar-btn:hover { background: var(--vscode-button-hoverBackground); }
         .katex-display { overflow-x: auto; overflow-y: hidden; }
+        
+        /* Safe Inline Warning Style */
+        .emoji-warning {
+            background-color: #fff8c5;
+            color: #24292f;
+            padding: 2px 5px;
+            border-radius: 3px;
+            /* No borders or blocks to prevent layout break */
+        }
     </style>
 </head>
 <body>
@@ -181,14 +190,19 @@ export class PreviewPanel {
         renderer.text = function(token) {
             let text = token.text || token;
             if (typeof text === 'string') {
-                // Highlight syntax only
                 text = text.replace(/==([^=]+)==/g, '<mark>$1</mark>');
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
+                
+                // Safe Inline Auto-Alert
+                if (text.includes('⚠️')) {
+                     // Only wrap the part after emoji if possible, or whole line
+                     // Simple safe wrap: Replace "⚠️ text..." with styled span
+                     text = text.replace(/(⚠️\s*[^<\\n]+)/g, '<span class="emoji-warning">$1</span>');
+                }
             }
             return text;
         };
         
-        // GitHub Alerts
         renderer.blockquote = function(quote) {
             const match = quote.match(/^<p>\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\]\\s*/i);
             if (match) {

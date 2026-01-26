@@ -64,6 +64,12 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
         @page { size: A4; margin: 20mm; }
         .katex-display { overflow-x: auto; overflow-y: hidden; }
         pre { background-color: #f6f8fa !important; }
+        .emoji-warning {
+            background-color: #fff8c5;
+            color: #24292f;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
@@ -74,6 +80,9 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
             let text = token.text || token;
             if (typeof text === 'string') {
                 text = text.replace(/==([^=]+)==/g, '<mark style="background-color: #ffe135; border-radius: 2px; padding: 0.1em 0.2em;">$1</mark>');
+                if (text.includes('⚠️')) {
+                     text = text.replace(/(⚠️\\s*[^<\\n]+)/g, '<span class="emoji-warning">$1</span>');
+                }
             }
             return text;
         };
