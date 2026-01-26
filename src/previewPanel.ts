@@ -81,6 +81,9 @@ export class PreviewPanel {
                     case 'applyFormat':
                         this._applyFormat(message.format, message.selectedText);
                         return;
+                    case 'exportPdf':
+                        vscode.commands.executeCommand('markdown-viewer.exportPdf');
+                        return;
                 }
             },
             null,
@@ -107,7 +110,6 @@ export class PreviewPanel {
             return;
         }
 
-        // Find the editor for the current document (activeTextEditor might be undefined if focus is in webview)
         const editor = vscode.window.visibleTextEditors.find(
             e => e.document.uri.toString() === this._currentDocument?.uri.toString()
         );
@@ -122,8 +124,6 @@ export class PreviewPanel {
         const document = editor.document;
         const text = document.getText();
 
-        // Find the selected text in the document
-        // This is a simple exact match. If markdown rendering significantly differs, this might fail unless selectedText is unique.
         const index = text.indexOf(selectedText);
         if (index === -1) {
             vscode.window.showWarningMessage('Could not find exactly matching text in source. Try selecting distinct text.');
@@ -143,7 +143,6 @@ export class PreviewPanel {
                 wrapper = '==';
                 break;
             case 'red-highlight':
-                // Use HTML mark with inline style for red
                 editor.edit(editBuilder => {
                     editBuilder.replace(range, `<mark style="background:#ff6b6b;color:#fff">${selectedText}</mark>`);
                 });
@@ -173,32 +172,20 @@ export class PreviewPanel {
     private _getHtmlForWebview(webview: vscode.Webview): string {
         const content = this._currentDocument?.getText() || '';
 
-        // Custom resources from media folder
-        const styleUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'preview.css')
-        );
-        const scriptUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'preview.js')
-        );
+        // Resources
+        const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'preview.css'));
+        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'preview.js'));
 
-        // Vendored resources from media/vendor
-        const katexCss = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'katex', 'katex.min.css')
-        );
-        const katexJs = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'katex', 'katex.min.js')
-        );
-        const highlightCss = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'github.min.css')
-        );
-        const highlightJs = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'highlight.min.js')
-        );
-        const markedJs = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'marked.min.js')
-        );
+        // Vendored resources
+        const katexCss = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'katex', 'katex.min.css'));
+        const katexJs = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'katex', 'katex.min.js'));
+        const highlightCss = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'github.min.css'));
+        const highlightJs = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'highlight.min.js'));
+        const markedJs = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'marked.min.js'));
 
-        // Escape content for safe embedding
+        // GitHub Markdown CSS
+        const githubCss = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'github-markdown.css'));
+
         const escapedContent = this._escapeHtml(content);
 
         return `<!DOCTYPE html>
@@ -209,24 +196,76 @@ export class PreviewPanel {
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; img-src ${webview.cspSource} https: data:;">
     <title>Markdown Preview</title>
     
-    <!-- KaTeX -->
     <link rel="stylesheet" href="${katexCss}">
     <script src="${katexJs}"></script>
     
-    <!-- Highlight.js -->
     <link rel="stylesheet" href="${highlightCss}">
     <script src="${highlightJs}"></script>
     
-    <!-- Marked.js -->
     <script src="${markedJs}"></script>
     
-    <!-- Custom styles -->
+    <link rel="stylesheet" href="${githubCss}">
     <link rel="stylesheet" href="${styleUri}">
+    
+    <style>
+        .markdown-body {
+            box-sizing: border-box;
+            min-width: 200px;
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 45px;
+        }
+        
+        @media (max-width: 767px) {
+            .markdown-body {
+                padding: 15px;
+            }
+        }
+        
+        /* Toolbar */
+        .top-toolbar {
+            position: fixed;
+            top: 0;
+            right: 20px;
+            background: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-widget-border);
+            border-top: none;
+            padding: 4px 8px;
+            border-radius: 0 0 4px 4px;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 8px;
+        }
+        
+        .toolbar-btn {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 4px 12px;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: var(--vscode-font-family);
+        }
+        
+        .toolbar-btn:hover {
+            background: var(--vscode-button-hoverBackground);
+        }
+
+        /* Fix for KaTeX in GitHub CSS */
+        .katex-display { overflow-x: auto; overflow-y: hidden; }
+    </style>
 </head>
 <body>
-    <div class="preview-content" id="preview"></div>
+    <div class="top-toolbar">
+        <button class="toolbar-btn" onclick="exportPdf()">Export PDF</button>
+    </div>
+
+    <!-- Main Content Container with github-markdown-css class -->
+    <div class="markdown-body preview-content" id="preview"></div>
     
-    <!-- Floating Toolbar -->
+    <!-- Floating Toolbar (for selection) -->
     <div class="floating-toolbar" id="floatingToolbar">
         <button id="boldBtn" title="Bold"><b>B</b></button>
         <button id="highlightBtn" title="Yellow Highlight">
@@ -245,11 +284,6 @@ export class PreviewPanel {
     }
 
     private _escapeHtml(text: string): string {
-        return text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
+        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 }

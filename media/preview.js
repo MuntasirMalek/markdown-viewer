@@ -1,6 +1,13 @@
 // ===== VS Code API =====
 const vscode = acquireVsCodeApi();
 
+// Expose for toolbar buttons
+window.exportPdf = () => {
+    vscode.postMessage({
+        type: 'exportPdf'
+    });
+};
+
 // ===== DOM Elements =====
 const preview = document.getElementById('preview');
 const floatingToolbar = document.getElementById('floatingToolbar');
