@@ -14,7 +14,6 @@
     --table-header-bg: transparent;
     --table-row-alt: transparent;
     --table-border: #dfe2e5;
-    /* Lighter border to match MPE */
 
     /* Blockquote */
     --blockquote-border: #d0d7de;
@@ -211,13 +210,14 @@ td {
 }
 
 th {
-    background: var(--table-header-bg);
+    background: transparent !important;
+    /* Force transparent */
     font-weight: 600;
 }
 
 tr:nth-child(even) {
-    background: var(--table-row-alt);
-    /* Default matches var which is now transparent */
+    background: transparent !important;
+    /* Force transparent to kill zebra striping */
 }
 
 /* ===== Horizontal Rules ===== */

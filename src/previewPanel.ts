@@ -162,14 +162,14 @@ export class PreviewPanel {
         .toolbar-btn:hover { background: var(--vscode-button-hoverBackground); }
         .katex-display { overflow-x: auto; overflow-y: hidden; }
         
-        /* Magic Auto-Alert: Transparent Background */
+        /* Magic Auto-Alert: Monochrome / Plain Style */
         .emoji-warning {
             display: inline-block;
             width: 95%; 
-            background-color: transparent; /* Changed from yellow to transparent to remove "highlight" */
-            color: #24292e;
+            background-color: transparent;
+            color: inherit; /* Inherit text color */
             padding: 8px 12px;
-            border-left: 4px solid #e3b341; /* Keep yellow border */
+            border-left: 4px solid #d0d7de; /* Gray border instead of yellow */
             border-radius: 0 2px 2px 0;
             margin: 4px 0;
             white-space: normal;
@@ -178,7 +178,7 @@ export class PreviewPanel {
         .emoji-warning-icon {
             font-weight: bold;
             margin-right: 6px;
-            color: #856404;
+            color: inherit; /* Inherit color, no yellow/brown */
         }
         .emoji-warning em { font-style: normal; font-weight: 500; }
     </style>
@@ -203,7 +203,7 @@ export class PreviewPanel {
             if (typeof text === 'string') {
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
                 
-                // MPE-style Auto-Alert: Replace ⚠️ with ! and style
+                // MPE-style Auto-Alert: Replace ⚠️ with ! but monochrome
                 if (text.includes('⚠️')) {
                      text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning"><span class="emoji-warning-icon">!</span>$2</span>');
                 }

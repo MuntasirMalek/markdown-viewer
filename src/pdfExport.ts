@@ -68,10 +68,10 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
         .emoji-warning {
             display: inline-block;
             width: 95%;
-            background-color: transparent; /* No background */
-            color: #24292f;
+            background-color: transparent;
+            color: inherit;
             padding: 8px 12px;
-            border-left: 4px solid #e3b341;
+            border-left: 4px solid #d0d7de; /* Gray border */
             border-radius: 0 2px 2px 0;
             margin: 4px 0;
             white-space: normal;
@@ -80,7 +80,7 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
         .emoji-warning-icon {
             font-weight: bold;
             margin-right: 6px;
-            color: #856404;
+            color: inherit;
         }
         .emoji-warning em { font-style: normal; font-weight: 500; }
     </style>
