@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.11] - 2024-01-26
+
+### Fixed
+- Improved "Auto-Alert" for `⚠️` to use `inline-block` styling. This creates a proper box (with border and padding) that respects table cell layout relative to its container, achieving the exact visual style of the reference extension.
+
 ## [1.0.10] - 2024-01-26
 
 ### Fixed
