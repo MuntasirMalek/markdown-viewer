@@ -6,10 +6,11 @@ import { exportToPdf } from './pdfExport';
 export function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
     context.subscriptions.push(outputChannel);
-    outputChannel.appendLine('Extension Activation Started (v1.0.43 - GLOBAL SYNC).');
+    outputChannel.appendLine('Extension Activation Started (v1.0.46).');
 
     // Status Bar Item for Sync Health
     const syncStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    syncStatusItem.command = 'markdown-viewer.showLogs';
     context.subscriptions.push(syncStatusItem);
 
     const openPreview = () => {
@@ -45,7 +46,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (editor && editor.document.languageId === 'markdown') {
             outputChannel.appendLine(`[Focus] Active Editor Changed: ${editor.document.fileName}`);
             PreviewPanel.updateContent(editor.document);
-            syncStatusItem.text = "$(zap) MD Sync: Ready";
+            syncStatusItem.text = "$(check) MD Sync: Ready";
             syncStatusItem.show();
         } else {
             syncStatusItem.hide();
@@ -54,30 +55,37 @@ export function activate(context: vscode.ExtensionContext) {
 
     const scrollListener = vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
         if (event.textEditor.document.languageId === 'markdown') {
-            // NUCLEAR OPTION: NO PATH CHECKS.
-            // If a markdown file scrolls, we send the signal.
-            // This rules out identifying issues.
+            const currentDoc = PreviewPanel.currentDocument;
 
-            // Ensure it doesn't error out if panel is closed
-            if (PreviewPanel.currentDocument) {
+            // RESTORED VALIDATION LOGIC (Case Insensitive + Basename Fallback)
+            // We need this to prevent chaos if user has multiple files.
+            let shouldSync = false;
+
+            if (currentDoc) {
+                const eventPath = event.textEditor.document.uri.fsPath.toLowerCase();
+                const previewPath = currentDoc.uri.fsPath.toLowerCase();
+                const eventBase = path.basename(eventPath);
+                const previewBase = path.basename(previewPath);
+
+                if (eventPath === previewPath) {
+                    shouldSync = true;
+                } else if (eventBase === previewBase) {
+                    shouldSync = true;
+                }
+            }
+
+            if (shouldSync) {
                 const visibleRange = event.visibleRanges[0];
                 if (visibleRange) {
-                    // Log that we ARE sending it
-                    // outputChannel.appendLine(`[Sync FORCE] Sending Line: ${visibleRange.start.line}`);
-
                     PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
-
-                    syncStatusItem.text = `$(zap) MD Sync: Sending...`;
+                    syncStatusItem.text = `$(check) MD Sync: Active`;
                     syncStatusItem.show();
-
-                    // Reset status after a clearer timeout
-                    setTimeout(() => {
-                        syncStatusItem.text = `$(check) MD Sync: Active`;
-                    }, 500);
                 }
             } else {
-                syncStatusItem.text = `$(circle-slash) No Preview`;
-                syncStatusItem.show();
+                if (currentDoc) {
+                    syncStatusItem.text = `$(alert) MD Sync: Mismatch`;
+                    syncStatusItem.show();
+                }
             }
         }
     });
