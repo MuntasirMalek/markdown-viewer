@@ -20,7 +20,7 @@
     --texture-border: #f1f1f1;
     --texture-text: #24292e;
 
-    /* Highlight - NEON Yellow (Highlighter Style) */
+    /* Highlight - FORCE NEON YELLOW */
     --highlight-bg: #ffff00;
     --highlight-red-bg: #ff6b6b;
 
@@ -31,6 +31,22 @@
     --toolbar-bg: #2d2d30;
     --toolbar-border: #3c3c3c;
 }
+
+/* ===== Highlight - Strong Override ===== */
+mark {
+    background-color: #ffff00 !important;
+    color: #000000 !important;
+    /* Force Black text for contrast */
+    padding: 0.1em 0.2em;
+    border-radius: 2px;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+mark.red-highlight {
+    background-color: #ff6b6b !important;
+    color: #ffffff !important;
+}
+
 
 /* ===== Reset & Base ===== */
 * {
@@ -234,18 +250,6 @@ img {
     border-radius: 4px;
 }
 
-/* ===== Highlights ===== */
-mark {
-    background: var(--highlight-bg);
-    padding: 0.1em 0.2em;
-    border-radius: 2px;
-    color: inherit;
-}
-
-mark.red-highlight {
-    background: var(--highlight-red-bg);
-    color: #fff;
-}
 
 /* ===== Math ===== */
 .katex-display {

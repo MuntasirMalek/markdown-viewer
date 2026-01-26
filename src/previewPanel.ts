@@ -67,7 +67,6 @@ export class PreviewPanel {
                         this._applyFormat(message.format, message.selectedText);
                         return;
                     case 'exportPdf':
-                        // Export directly from current panel context
                         if (this._currentDocument) {
                             exportToPdf(this._extensionUri, this._currentDocument);
                         } else {
@@ -163,23 +162,17 @@ export class PreviewPanel {
     <style>
         .markdown-body { box-sizing: border-box; min-width: 200px; max-width: 980px; margin: 0 auto; padding: 45px; }
         @media (max-width: 767px) { .markdown-body { padding: 15px; } }
-        .top-toolbar { position: fixed; top: 0; right: 20px; background: var(--vscode-editor-background); border: 1px solid var(--vscode-widget-border); border-top: none; padding: 4px 8px; border-radius: 0 0 4px 4px; z-index: 1000; display: flex; gap: 8px; }
-        .toolbar-btn { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 4px 12px; border-radius: 2px; cursor: pointer; font-size: 12px; }
-        .toolbar-btn:hover { background: var(--vscode-button-hoverBackground); }
-        .katex-display { overflow-x: auto; overflow-y: hidden; }
-        
         /* MPE-style: Solid Gray Blocks */
         .emoji-warning {
             display: inline-block;
             width: 95%; 
-            background-color: #f1f1f1; /* Solid Gray */
+            background-color: #f1f1f1; 
             color: #24292e;
             padding: 8px 12px;
-            border-left: 4px solid #f1f1f1; /* Matching Border */
+            border-left: 4px solid #f1f1f1; 
             border-radius: 0 2px 2px 0;
             margin: 4px 0;
             white-space: normal;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
         }
         .emoji-warning-icon { margin-right: 6px; }
     </style>
@@ -198,16 +191,38 @@ export class PreviewPanel {
     <script id="markdown-content" type="text/plain">${escapedContent}</script>
     <script src="${scriptUri}"></script>
     <script>
+        // Inline functions to guarantee sync logic works even if external script loads late
+        function _inlineAddLineAttributes(sourceLines) {
+            const preview = document.getElementById('preview');
+            const usedLines = new Set();
+            const blockElements = preview.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote > p, pre, .katex-display, table, .emoji-warning');
+            blockElements.forEach(el => {
+                const elText = el.textContent.trim();
+                if (!elText || elText.length < 2) return;
+                // Normalize text by removing non-alphanumeric chars for robust matching
+                const cleanElText = elText.replace(/[^a-zA-Z0-9\\u0980-\\u09ff]+/g, '');
+                if (cleanElText.length < 2) return;
+
+                for (let i = 0; i < sourceLines.length; i++) {
+                     if (usedLines.has(i)) continue;
+                     const srcLine = sourceLines[i];
+                     const cleanSrcLine = srcLine.replace(/[^a-zA-Z0-9\\u0980-\\u09ff]+/g, '');
+                     
+                     if (cleanSrcLine.includes(cleanElText) || cleanElText.includes(cleanSrcLine)) {
+                         el.setAttribute('data-line', i);
+                         usedLines.add(i);
+                         break;
+                     }
+                }
+            });
+        }
+
         const renderer = new marked.Renderer();
         renderer.text = function(token) {
             let text = token.text || token;
             if (typeof text === 'string') {
-                // Restore Highlighter ==text==
                 text = text.replace(/==([^=]+)==/g, '<mark>$1</mark>');
-                
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
-                
-                // MPE-style Auto-Alert: Restoring Emoji ⚠️
                 if (text.includes('⚠️')) {
                      text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning">$1 $2</span>');
                 }
@@ -243,9 +258,7 @@ export class PreviewPanel {
             const inlineMath = [];
             text = text.replace(/\\$\\$([^$]+)\\$\\$/g, (m, math) => { mathBlocks.push(math); return \`%%MATHBLOCK\${mathBlocks.length-1}%%\`; });
             text = text.replace(/\\$([^$\\n]+)\\$/g, (m, math) => { inlineMath.push(math); return \`%%INLINEMATH\${inlineMath.length-1}%%\`; });
-            
             let html = marked.parse(text);
-            
             html = html.replace(/%%MATHBLOCK(\\d+)%%/g, (m, i) => {
                 try { return katex.renderToString(mathBlocks[parseInt(i)], { displayMode: true, throwOnError: false }); } catch(e) { return m; }
             });
@@ -258,9 +271,20 @@ export class PreviewPanel {
         const raw = ${JSON.stringify(content)};
         document.getElementById('preview').innerHTML = renderMarkdown(raw);
         
-        // Ensure scroll sync logic runs after rendering
-        if (typeof addLineAttributes === 'function') {
-            addLineAttributes(raw.split('\\n'));
+        // Execute Inline Sync Logic
+        _inlineAddLineAttributes(raw.split('\\n'));
+        
+        // Ensure message listener for scroll is attached if not already
+        if (!window._messageListenerAttached) {
+             window.addEventListener('message', event => {
+                const message = event.data;
+                if (message.type === 'scrollTo') {
+                    const line = message.line;
+                    const el = document.querySelector(\`[data-line="\${line}"]\`);
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+             });
+             window._messageListenerAttached = true;
         }
     </script>
 </body>
