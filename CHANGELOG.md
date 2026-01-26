@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.39] - 2024-01-26
+
+### Fixed
+- **Sync Fix**: Switched to file-system path (`fsPath`) comparison for sync validation. This fixes the issue where the editor wouldn't sync the preview because it thought they were different documents (due to encoding differences).
+- **Bangla Support**: Simplified the line-matching regex to just ignore whitespace. This ensures that Bangla text (and other scripts) are correctly mapped to their preview blocks, restoring accurate scroll positioning.
+
 ## [1.0.38] - 2024-01-26
 
 ### Fixed
