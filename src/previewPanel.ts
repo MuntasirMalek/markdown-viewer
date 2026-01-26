@@ -161,19 +161,6 @@ export class PreviewPanel {
         .toolbar-btn { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 4px 12px; border-radius: 2px; cursor: pointer; font-size: 12px; }
         .toolbar-btn:hover { background: var(--vscode-button-hoverBackground); }
         .katex-display { overflow-x: auto; overflow-y: hidden; }
-        
-        /* Auto-Alert Styles for ⚠️ */
-        .emoji-alert-warning {
-            display: inline-block;
-            background-color: #fff8c5;
-            color: #24292f;
-            border-left: 3px solid #e3b341;
-            padding: 4px 8px;
-            border-radius: 2px;
-            margin: 4px 0;
-            font-style: normal !important;
-        }
-        .emoji-alert-warning em { font-style: italic; }
     </style>
 </head>
 <body>
@@ -194,15 +181,14 @@ export class PreviewPanel {
         renderer.text = function(token) {
             let text = token.text || token;
             if (typeof text === 'string') {
+                // Highlight syntax only
                 text = text.replace(/==([^=]+)==/g, '<mark>$1</mark>');
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
-                if (text.includes('⚠️')) {
-                     text = text.replace(/(^|\\s)⚠️\\s*([^<\\n]+)/g, '$1<span class="emoji-alert-warning">⚠️ $2</span>');
-                }
             }
             return text;
         };
         
+        // GitHub Alerts
         renderer.blockquote = function(quote) {
             const match = quote.match(/^<p>\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\]\\s*/i);
             if (match) {
