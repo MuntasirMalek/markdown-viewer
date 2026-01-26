@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.38] - 2024-01-26
+
+### Fixed
+- **UI Final Polish**: Removed the "extra thing" (Top Toolbar) as per feedback. Now the viewing area is completely clean. The FAB at bottom-right is the primary export action.
+- **Deep Sync Debug**: Enhanced the scroll synchronization logic to be absolutely sure it's targeting the correct document, logging identifying information to the output channel to trace any mismatches.
+
 ## [1.0.37] - 2024-01-26
 
 ### Fixed
