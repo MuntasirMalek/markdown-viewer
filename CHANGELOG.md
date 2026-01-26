@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.24] - 2024-01-26
+
+### Fixed
+- **Force Neon Highlight**: Applied `!important` to neon yellow styles to ensure no other theme setting overrides it.
+- **Robust PDF Dependency**: Added manual path resolution for `puppeteer-core` to fix export issues in some environments.
+- **Inline Scroll Sync**: Embedded scroll synchronization logic directly into the preview to guaranteeing availability.
+
 ## [1.0.23] - 2024-01-26
 
 ### Fixed

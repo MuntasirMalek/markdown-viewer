@@ -4,7 +4,24 @@ import * as fs from 'fs';
 import * as os from 'os';
 
 let puppeteer: typeof import('puppeteer-core') | undefined;
-try { puppeteer = require('puppeteer-core'); } catch (e) { console.error('puppeteer-core not available:', e); }
+
+// Robust require for puppeteer-core
+try {
+    puppeteer = require('puppeteer-core');
+} catch (e) {
+    // Fallback: try to resolve from extension/node_modules if bundled weirdly
+    try {
+        const extPath = vscode.extensions.getExtension('utsho.markdown-viewer-enhanced')?.extensionPath;
+        if (extPath) {
+            const localPath = path.join(extPath, 'node_modules', 'puppeteer-core');
+            if (fs.existsSync(localPath)) {
+                puppeteer = require(localPath);
+            }
+        }
+    } catch (e2) {
+        console.error('Failed to load puppeteer-core:', e);
+    }
+}
 
 function findChromePath(): string | undefined {
     const config = vscode.workspace.getConfiguration('markdownViewer');
@@ -68,21 +85,14 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
         .emoji-warning {
             display: inline-block;
             width: 95%;
-            background-color: #f1f1f1; /* Solid Gray */
+            background-color: #f1f1f1; 
             color: #24292e;
             padding: 8px 12px;
             border-left: 4px solid #f1f1f1;
             border-radius: 0 2px 2px 0;
             margin: 4px 0;
             white-space: normal;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
         }
-        .emoji-warning-icon {
-            font-weight: bold;
-            margin-right: 6px;
-            color: inherit;
-        }
-        .emoji-warning em { font-style: normal; font-weight: 500; }
     </style>
 </head>
 <body>
@@ -92,7 +102,7 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
         renderer.text = function(token) {
             let text = token.text || token;
             if (typeof text === 'string') {
-                text = text.replace(/==([^=]+)==/g, '<mark style="background-color: #ffe135; border-radius: 2px; padding: 0.1em 0.2em;">$1</mark>');
+                text = text.replace(/==([^=]+)==/g, '<mark style="background-color: #ffff00; color: #000;">$1</mark>');
                 if (text.includes('⚠️')) {
                      text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning">$1 $2</span>');
                 }
@@ -148,11 +158,16 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
     const ext = vscode.extensions.getExtension('utsho.markdown-viewer-enhanced');
     const outputChannel = ext?.exports?.outputChannel;
     if (outputChannel) outputChannel.appendLine(`[${new Date().toISOString()}] Starting PDF export for ${document.fileName}`);
-    if (!puppeteer) { vscode.window.showErrorMessage('PDF export requires "puppeteer-core".'); return; }
+
+    // Check puppeteer
+    if (!puppeteer) {
+        vscode.window.showErrorMessage('PDF export requires "puppeteer-core". Failed to load dependency.');
+        return;
+    }
 
     const chromePath = findChromePath();
     if (outputChannel) outputChannel.appendLine(chromePath ? `Found Chrome: ${chromePath}` : 'Chrome not found.');
-    if (!chromePath) { vscode.window.showErrorMessage('Chrome/Chromium not found.'); return; }
+    if (!chromePath) { vscode.window.showErrorMessage('Chrome/Chromium not found. Please install Chrome or specify path in settings.'); return; }
 
     const defaultFileName = path.basename(document.fileName, '.md') + '.pdf';
     const defaultUri = vscode.Uri.file(path.join(path.dirname(document.fileName), defaultFileName));
@@ -162,7 +177,11 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
     await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Exporting...', cancellable: false }, async (p) => {
         try {
             p.report({ increment: 10, message: 'Launching...' });
-            const browser = await puppeteer.launch({ headless: true, executablePath: chromePath, args: ['--no-sandbox'] });
+
+            // Log Puppeteer logic
+            if (outputChannel) outputChannel.appendLine('Launching Puppeteer...');
+
+            const browser = await puppeteer!.launch({ headless: true, executablePath: chromePath, args: ['--no-sandbox'] });
             const page = await browser.newPage();
             const html = generateHtmlForPdf(document.getText(), extensionUri);
             await page.setContent(html, { waitUntil: ['networkidle0', 'domcontentloaded'], timeout: 60000 });
