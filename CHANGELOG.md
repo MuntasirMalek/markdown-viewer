@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.40] - 2024-01-26
+
+### Fixed
+- **Sync Fix (Mac/Windows)**: Use case-insensitive path normalization key to comparisons. This ensures that `/Users/User/File.md` and `/users/user/file.md` are treated as the same file, restoring sync functionality on systems with case-insensitive file systems.
+- **Logging**: Added output channel logging (search "Markdown Viewer Enhanced" in Output tab) to help troubleshoot if sync issues persist.
+
 ## [1.0.39] - 2024-01-26
 
 ### Fixed
