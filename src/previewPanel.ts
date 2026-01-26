@@ -10,6 +10,7 @@ export class PreviewPanel {
     private readonly _extensionUri: vscode.Uri;
     private _currentDocument: vscode.TextDocument | undefined;
     private _disposables: vscode.Disposable[] = [];
+    private _lastScrollTime = 0;
 
     public static createOrShow(extensionUri: vscode.Uri, document: vscode.TextDocument) {
         const column = vscode.ViewColumn.Beside;
@@ -73,11 +74,27 @@ export class PreviewPanel {
                             vscode.window.showWarningMessage('No document to export. Please open a Markdown file.');
                         }
                         return;
+                    case 'revealLine':
+                        this._revealLineInEditor(message.line);
+                        return;
                 }
             },
             null,
             this._disposables
         );
+    }
+
+    private _revealLineInEditor(line: number) {
+        if (!this._currentDocument) return;
+        if (Date.now() - this._lastScrollTime < 100) return;
+
+        const editor = vscode.window.visibleTextEditors.find(
+            e => e.document.uri.toString() === this._currentDocument?.uri.toString()
+        );
+        if (editor) {
+            const range = new vscode.Range(line, 0, line, 0);
+            editor.revealRange(range, vscode.TextEditorRevealType.AtTop);
+        }
     }
 
     public dispose() {
@@ -100,7 +117,6 @@ export class PreviewPanel {
             e => e.document.uri.toString() === this._currentDocument?.uri.toString()
         );
         if (!editor || !selectedText) {
-            // Allow exportPdf even without selection if triggered by button
             if (format === 'exportPdf') {
                 exportToPdf(this._extensionUri, this._currentDocument);
                 return;
@@ -111,7 +127,6 @@ export class PreviewPanel {
         const document = editor.document;
         const index = document.getText().indexOf(selectedText);
         if (index === -1) {
-            // Fallback for exportPdf if text not found but formatting requested (shouldn't happen for export)
             if (format === 'exportPdf') {
                 exportToPdf(this._extensionUri, document);
                 return;
@@ -188,7 +203,6 @@ export class PreviewPanel {
             white-space: normal;
         }
         .emoji-warning-icon { margin-right: 6px; }
-        /* Persistent FAB */
         .fab-export {
             position: fixed;
             bottom: 20px;
@@ -216,7 +230,6 @@ export class PreviewPanel {
         <button class="toolbar-btn" onclick="exportPdf()">Export PDF</button>
     </div>
     
-    <!-- Floating Action Button for easy export access -->
     <button class="fab-export" onclick="exportPdf()" title="Export to PDF">📄</button>
 
     <div class="markdown-body preview-content" id="preview"></div>
@@ -230,14 +243,12 @@ export class PreviewPanel {
     <script id="markdown-content" type="text/plain">${escapedContent}</script>
     <script src="${scriptUri}"></script>
     <script>
-        // Inline functions to guarantee sync logic works even if external script loads late
         function _inlineAddLineAttributes(sourceLines) {
             const preview = document.getElementById('preview');
             const usedLines = new Set();
             const blockElements = preview.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote > p, pre, .katex-display, table, .emoji-warning');
             blockElements.forEach(el => {
                 const elText = el.textContent.trim();
-                // Normalized alphanumeric+bangla replacement
                 const cleanElText = elText.replace(/[^a-zA-Z0-9\\u0980-\\u09ff]+/g, '');
                 if (cleanElText.length < 2) return;
 
@@ -321,14 +332,10 @@ export class PreviewPanel {
                     if (el) {
                         el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     } else if (totalLines) {
-                        // Aggressive Fallback: Percentage Scroll
-                        const preview = document.getElementById('preview');
-                        if (preview) {
-                             const pct = line / totalLines;
-                             window.scrollTo(0, pct * document.body.scrollHeight);
-                             const content = document.querySelector('.preview-content');
-                             if (content) content.scrollTop = pct * content.scrollHeight;
-                        }
+                         const pct = line / totalLines;
+                         window.scrollTo(0, pct * document.body.scrollHeight);
+                         const content = document.querySelector('.preview-content');
+                         if (content) content.scrollTop = pct * content.scrollHeight;
                     }
                 }
              });

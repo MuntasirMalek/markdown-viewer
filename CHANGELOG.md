@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.29] - 2024-01-26
+
+### Fixed
+- **Scroll Sync (Bidirectional)**: Fixed the synchronization from Preview back to Editor. Scrolling the preview now updates the editor cursor position.
+- **PDF Debugging**: Added "Nuclear Debug Mode" to PDF export. If the dependency fails to load, the extension will now list the entire file structure of the installation in the debug console, helping identify why `puppeteer-core` is missing.
+- **Dependency Loading**: Added `createRequire` strategy for robust module loading throughout.
+
 ## [1.0.28] - 2024-01-26
 
 ### Fixed

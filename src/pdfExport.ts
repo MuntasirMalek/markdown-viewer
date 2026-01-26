@@ -2,13 +2,12 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { createRequire } from 'module';
 
-// Define the interface for puppeteer-core to handle 'any' imports
+// Global variable to cache the loaded module
 interface Puppeteer {
     launch(options?: any): Promise<any>;
 }
-
-// Global variable to cache the loaded module
 let puppeteerInstance: Puppeteer | undefined;
 
 async function loadPuppeteer(extensionUri: vscode.Uri): Promise<string | null> {
@@ -16,8 +15,18 @@ async function loadPuppeteer(extensionUri: vscode.Uri): Promise<string | null> {
 
     const errors: string[] = [];
     const extPath = extensionUri.fsPath;
+    const req = createRequire(extPath); // Create a require function relative to extension root
 
-    // 1. Try Dynamic Import (Best for ESM/VS Code environments)
+    // 1. Try createRequire (most robust for packaged extensions)
+    try {
+        // @ts-ignore
+        puppeteerInstance = req('puppeteer-core');
+        return null;
+    } catch (e: any) {
+        errors.push(`createRequire failed: ${e.message}`);
+    }
+
+    // 2. Try Dynamic Import
     try {
         const mod = await import('puppeteer-core');
         puppeteerInstance = mod.default || mod;
@@ -26,28 +35,27 @@ async function loadPuppeteer(extensionUri: vscode.Uri): Promise<string | null> {
         errors.push(`Dynamic Import failed: ${e.message}`);
     }
 
-    // 2. Try Standard Require
+    // 3. Try Standard Require
     try {
         // @ts-ignore
         puppeteerInstance = require('puppeteer-core');
         return null;
     } catch (e: any) {
-        errors.push(`Require failed: ${e.message}`);
+        errors.push(`Standard Require failed: ${e.message}`);
     }
 
-    // 3. Try Explicit Path loading (Node Modules inside extension)
+    // 4. Try Explicit Paths
     const possiblePaths = [
         path.join(extPath, 'node_modules', 'puppeteer-core'),
         path.join(extPath, 'node_modules', 'puppeteer-core', 'index.js'),
-        path.join(extPath, 'node_modules', 'puppeteer-core', 'lib', 'cjs', 'puppeteer', 'puppeteer.js'), // CommonJS entry
-        path.join(path.dirname(extPath), 'node_modules', 'puppeteer-core') // In case we are in out/
+        path.join(extPath, '..', 'node_modules', 'puppeteer-core') // Dev mode fallback
     ];
 
     for (const p of possiblePaths) {
         try {
-            if (fs.existsSync(p) || fs.existsSync(p + '.js')) {
+            if (fs.existsSync(p)) {
                 // @ts-ignore
-                puppeteerInstance = require(p);
+                puppeteerInstance = req(p); // Use the custom require
                 return null;
             }
         } catch (e: any) {
@@ -194,10 +202,28 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
     const outputChannel = ext?.exports?.outputChannel;
     if (outputChannel) outputChannel.appendLine(`[${new Date().toISOString()}] Starting PDF export for ${document.fileName}`);
 
+    // Debug: List files in extension dir if load fails
     const loadErrors = await loadPuppeteer(extensionUri);
     if (!puppeteerInstance) {
-        if (outputChannel) outputChannel.appendLine(`Failed to load puppeteer-core. Errors: \n${loadErrors}`);
-        vscode.window.showErrorMessage(`Failed to load puppeteer-core. Please check output channel for details. \nError summary: ${loadErrors?.substring(0, 200)}...`);
+        if (outputChannel) {
+            outputChannel.appendLine(`Failed to load puppeteer-core. Errors: \n${loadErrors}`);
+            try {
+                // Nuclear Debug: List files
+                const root = extensionUri.fsPath;
+                if (fs.existsSync(root)) {
+                    outputChannel.appendLine(`Contents of ${root}:`);
+                    fs.readdirSync(root).forEach(f => outputChannel.appendLine(` - ${f}`));
+                    const modules = path.join(root, 'node_modules');
+                    if (fs.existsSync(modules)) {
+                        outputChannel.appendLine('Contents of node_modules:');
+                        fs.readdirSync(modules).forEach(f => outputChannel.appendLine(` - ${f}`));
+                    } else {
+                        outputChannel.appendLine('node_modules folder NOT found in extension root.');
+                    }
+                }
+            } catch (e) { }
+        }
+        vscode.window.showErrorMessage(`Failed to load puppeteer-core (Check Output for file structure). \nErrors: ${loadErrors?.substring(0, 150)}...`);
         return;
     }
 
@@ -214,7 +240,7 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
 
     await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Exporting...', cancellable: false }, async (p) => {
         try {
-            p.report({ increment: 10, message: 'Launching browser...' });
+            p.report({ increment: 10, message: 'Launch...' });
 
             const browser = await puppeteerInstance!.launch({ headless: true, executablePath: chromePath, args: ['--no-sandbox'] });
             const page = await browser.newPage();
@@ -226,7 +252,7 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
             await page.pdf({ path: saveUri.fsPath, format: (config.get('pdfPageSize') || 'A4') as any, margin: { top: '20mm', bottom: '20mm', left: '20mm', right: '20mm' }, printBackground: true });
 
             await browser.close();
-            if (outputChannel) outputChannel.appendLine('Export finished successfully.');
+            if (outputChannel) outputChannel.appendLine('Export success.');
             const action = await vscode.window.showInformationMessage(`Exported: ${path.basename(saveUri.fsPath)}`, 'Open');
             if (action === 'Open') vscode.env.openExternal(saveUri);
         } catch (e: any) {
