@@ -162,25 +162,23 @@ export class PreviewPanel {
         .toolbar-btn:hover { background: var(--vscode-button-hoverBackground); }
         .katex-display { overflow-x: auto; overflow-y: hidden; }
         
-        /* MPE-style: Solid Gray Blocks via Shared Texture */
+        /* MPE-style: Solid Gray Blocks */
         .emoji-warning {
             display: inline-block;
             width: 95%; 
             background-color: #f1f1f1; /* Solid Gray */
             color: #24292e;
             padding: 8px 12px;
-            border-left: 4px solid #f1f1f1; /* Matching Border (Solid Block) */
+            border-left: 4px solid #f1f1f1; /* Matching Border */
             border-radius: 0 2px 2px 0;
             margin: 4px 0;
             white-space: normal;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
         }
-        .emoji-warning-icon {
-            font-weight: bold;
-            margin-right: 6px;
-            color: inherit; /* Inherit black */
-        }
         .emoji-warning em { font-style: normal; font-weight: 500; }
+        
+        /* Ensure emoji itself is readable if distinct */
+        .emoji-warning-icon { margin-right: 6px; }
     </style>
 </head>
 <body>
@@ -203,9 +201,10 @@ export class PreviewPanel {
             if (typeof text === 'string') {
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
                 
-                // MPE-style Auto-Alert: Single Icon + Texture
+                // MPE-style Auto-Alert: Restoring Emoji ⚠️
+                // Stop replacing with matching '!' text. Show the emoji.
                 if (text.includes('⚠️')) {
-                     text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning">! $2</span>');
+                     text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning">$1 $2</span>');
                 }
             }
             return text;

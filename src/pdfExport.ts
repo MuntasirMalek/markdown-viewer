@@ -94,7 +94,7 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
             if (typeof text === 'string') {
                 text = text.replace(/==([^=]+)==/g, '<mark style="background-color: #ffe135; border-radius: 2px; padding: 0.1em 0.2em;">$1</mark>');
                 if (text.includes('⚠️')) {
-                     text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning">! $2</span>');
+                     text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning">$1 $2</span>');
                 }
             }
             return text;
