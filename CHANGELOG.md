@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.27] - 2024-01-26
+
+### Fixed
+- **PDF Export**: Implemented multi-strategy dependency loading (Dynamic Import -> Require -> Explicit Path -> CommonJS entry) to resolve "Failed to load" errors in all environments.
+- **Scroll Sync**: Reinforced scroll synchronization with an aggressive percentage-based fallback that scrolls the entire preview window if valid line markers are not found.
+
 ## [1.0.26] - 2024-01-26
 
 ### Fixed

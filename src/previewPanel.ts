@@ -282,20 +282,14 @@ export class PreviewPanel {
                     if (el) {
                         el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     } else if (totalLines) {
-                        // Fallback: Percentage Scroll
+                        // Aggressive Fallback: Percentage Scroll
                         const preview = document.getElementById('preview');
                         if (preview) {
                              const pct = line / totalLines;
-                             // Scroll main window or preview container?
-                             // CSS has .preview-content { overflow-y: auto } at body level or #preview.
-                             // Actually user CSS has body { overflow: hidden } and .preview-content { overflow-y: auto }
-                             // So we scroll the .preview-content
-                             const container = document.querySelector('.preview-content');
-                             if (container) {
-                                 container.scrollTop = pct * (container.scrollHeight - container.clientHeight);
-                             } else {
-                                 window.scrollTo(0, pct * document.body.scrollHeight);
-                             }
+                             // Apply to window and main container just in case
+                             window.scrollTo(0, pct * document.body.scrollHeight);
+                             const content = document.querySelector('.preview-content');
+                             if (content) content.scrollTop = pct * content.scrollHeight;
                         }
                     }
                 }

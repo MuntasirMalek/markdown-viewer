@@ -3,38 +3,60 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 
-// Lazy load puppeteer to avoid activation crash
-let puppeteer: typeof import('puppeteer-core') | undefined;
-
-function tryLoadPuppeteer(extensionUri: vscode.Uri): string | null {
-    if (puppeteer) return null;
-
-    const errors: string[] = [];
-
-    // 1. Try standard require
-    try {
-        puppeteer = require('puppeteer-core');
-        return null; // Success
-    } catch (e: any) {
-        errors.push(`Standard require failed: ${e.message}`);
-    }
-
-    // 2. Try absolute path from extension node_modules
-    try {
-        const localPath = path.join(extensionUri.fsPath, 'node_modules', 'puppeteer-core');
-        if (fs.existsSync(localPath)) {
-            puppeteer = require(localPath);
-            return null; // Success
-        } else {
-            errors.push(`Local path not found: ${localPath}`);
-        }
-    } catch (e: any) {
-        errors.push(`Local path require failed: ${e.message}`);
-    }
-
-    return errors.join(' | ');
+// Define the interface for puppeteer-core to handle 'any' imports
+interface Puppeteer {
+    launch(options?: any): Promise<any>;
 }
 
+// Global variable to cache the loaded module
+let puppeteerInstance: Puppeteer | undefined;
+
+async function loadPuppeteer(extensionUri: vscode.Uri): Promise<string | null> {
+    if (puppeteerInstance) return null;
+
+    const errors: string[] = [];
+    const extPath = extensionUri.fsPath;
+
+    // 1. Try Dynamic Import (Best for ESM/VS Code environments)
+    try {
+        const mod = await import('puppeteer-core');
+        puppeteerInstance = mod.default || mod;
+        return null;
+    } catch (e: any) {
+        errors.push(`Dynamic Import failed: ${e.message}`);
+    }
+
+    // 2. Try Standard Require
+    try {
+        // @ts-ignore
+        puppeteerInstance = require('puppeteer-core');
+        return null;
+    } catch (e: any) {
+        errors.push(`Require failed: ${e.message}`);
+    }
+
+    // 3. Try Explicit Path loading (Node Modules inside extension)
+    const possiblePaths = [
+        path.join(extPath, 'node_modules', 'puppeteer-core'),
+        path.join(extPath, 'node_modules', 'puppeteer-core', 'index.js'),
+        path.join(extPath, 'node_modules', 'puppeteer-core', 'lib', 'cjs', 'puppeteer', 'puppeteer.js'), // CommonJS entry
+        path.join(path.dirname(extPath), 'node_modules', 'puppeteer-core') // In case we are in out/
+    ];
+
+    for (const p of possiblePaths) {
+        try {
+            if (fs.existsSync(p) || fs.existsSync(p + '.js')) {
+                // @ts-ignore
+                puppeteerInstance = require(p);
+                return null;
+            }
+        } catch (e: any) {
+            errors.push(`Path ${p} failed: ${e.message}`);
+        }
+    }
+
+    return errors.join('\n');
+}
 
 function findChromePath(): string | undefined {
     const config = vscode.workspace.getConfiguration('markdownViewer');
@@ -172,12 +194,14 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
     const outputChannel = ext?.exports?.outputChannel;
     if (outputChannel) outputChannel.appendLine(`[${new Date().toISOString()}] Starting PDF export for ${document.fileName}`);
 
-    // Attempt to load puppeteer
-    const loadError = tryLoadPuppeteer(extensionUri);
-    if (!puppeteer) {
-        vscode.window.showErrorMessage(`PDF export failed to load "puppeteer-core". Debug info: ${loadError}`);
+    const loadErrors = await loadPuppeteer(extensionUri);
+    if (!puppeteerInstance) {
+        if (outputChannel) outputChannel.appendLine(`Failed to load puppeteer-core. Errors: \n${loadErrors}`);
+        vscode.window.showErrorMessage(`Failed to load puppeteer-core. Please check output channel for details. \nError summary: ${loadErrors?.substring(0, 200)}...`);
         return;
     }
+
+    if (outputChannel) outputChannel.appendLine('Puppeteer loaded successfully.');
 
     const chromePath = findChromePath();
     if (outputChannel) outputChannel.appendLine(chromePath ? `Found Chrome: ${chromePath}` : 'Chrome not found.');
@@ -190,12 +214,9 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
 
     await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Exporting...', cancellable: false }, async (p) => {
         try {
-            p.report({ increment: 10, message: 'Launching...' });
+            p.report({ increment: 10, message: 'Launching browser...' });
 
-            // Log Puppeteer logic
-            if (outputChannel) outputChannel.appendLine('Launching Puppeteer...');
-
-            const browser = await puppeteer!.launch({ headless: true, executablePath: chromePath, args: ['--no-sandbox'] });
+            const browser = await puppeteerInstance!.launch({ headless: true, executablePath: chromePath, args: ['--no-sandbox'] });
             const page = await browser.newPage();
             const html = generateHtmlForPdf(document.getText(), extensionUri);
             await page.setContent(html, { waitUntil: ['networkidle0', 'domcontentloaded'], timeout: 60000 });
@@ -205,11 +226,11 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
             await page.pdf({ path: saveUri.fsPath, format: (config.get('pdfPageSize') || 'A4') as any, margin: { top: '20mm', bottom: '20mm', left: '20mm', right: '20mm' }, printBackground: true });
 
             await browser.close();
-            if (outputChannel) outputChannel.appendLine('Success.');
+            if (outputChannel) outputChannel.appendLine('Export finished successfully.');
             const action = await vscode.window.showInformationMessage(`Exported: ${path.basename(saveUri.fsPath)}`, 'Open');
             if (action === 'Open') vscode.env.openExternal(saveUri);
         } catch (e: any) {
-            if (outputChannel) outputChannel.appendLine(`Error: ${e.message}\n${e.stack}`);
+            if (outputChannel) outputChannel.appendLine(`Export failed: ${e.message}\n${e.stack}`);
             vscode.window.showErrorMessage(`Failed: ${e.message}`);
         }
     });
