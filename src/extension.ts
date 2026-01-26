@@ -6,7 +6,12 @@ import { exportToPdf } from './pdfExport';
 export function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
     context.subscriptions.push(outputChannel);
-    outputChannel.appendLine('Extension Activation Started (v1.0.41).');
+    outputChannel.appendLine('Extension Activation Started (v1.0.42).');
+
+    // Status Bar Item for Sync Health
+    const syncStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    syncStatusItem.command = 'markdown-viewer.showLogs'; // Optional: clicking shows logs?
+    context.subscriptions.push(syncStatusItem);
 
     const openPreview = () => {
         const editor = vscode.window.activeTextEditor;
@@ -41,6 +46,12 @@ export function activate(context: vscode.ExtensionContext) {
         if (editor && editor.document.languageId === 'markdown') {
             outputChannel.appendLine(`[Focus] Active Editor Changed: ${editor.document.fileName}`);
             PreviewPanel.updateContent(editor.document);
+
+            // Update Status Bar
+            syncStatusItem.text = "$(check) MD Sync: Ready";
+            syncStatusItem.show();
+        } else {
+            syncStatusItem.hide();
         }
     });
 
@@ -48,27 +59,45 @@ export function activate(context: vscode.ExtensionContext) {
         if (event.textEditor.document.languageId === 'markdown') {
             const currentDoc = PreviewPanel.currentDocument;
 
-            // Normalized Paths
-            const eventPath = event.textEditor.document.uri.fsPath.toLowerCase();
-            const previewPath = currentDoc ? currentDoc.uri.fsPath.toLowerCase() : 'none';
+            // Sync Validation Logic
+            let shouldSync = false;
+            let reason = "Mismatch";
 
-            // VERBOSE LOGGING ENABLED FOR DIAGNOSIS
-            // This will print every scroll event.
-            const isMatch = (eventPath === previewPath);
+            if (currentDoc) {
+                const eventPath = event.textEditor.document.uri.fsPath.toLowerCase();
+                const previewPath = currentDoc.uri.fsPath.toLowerCase();
+                const eventBase = path.basename(eventPath);
+                const previewBase = path.basename(previewPath);
 
-            // Log the comparison to catch the "Dead Sync" culprit
-            outputChannel.appendLine(`[Scroll Check] Match=${isMatch}`);
-            outputChannel.appendLine(`   Event:   ${event.textEditor.document.fileName}`);
-            outputChannel.appendLine(`   Preview: ${currentDoc ? currentDoc.fileName : 'None'}`);
-
-            if (currentDoc && isMatch) {
-                const visibleRange = event.visibleRanges[0];
-                if (visibleRange) {
-                    outputChannel.appendLine(`   >> SYNCING line ${visibleRange.start.line}`);
-                    PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
+                if (eventPath === previewPath) {
+                    shouldSync = true;
+                    reason = "Exact Match";
+                } else if (eventBase === previewBase) {
+                    shouldSync = true;
+                    reason = "Basename Match (Fallback)";
+                } else {
+                    reason = `Path Mismatch (${eventBase} != ${previewBase})`;
                 }
             } else {
-                outputChannel.appendLine(`   >> SKIPPED (Mismatch or No Preview)`);
+                reason = "No Preview Doc";
+            }
+
+            // Update UI
+            if (shouldSync) {
+                const visibleRange = event.visibleRanges[0];
+                if (visibleRange) {
+                    // outputChannel.appendLine(`[Sync] ${reason} -> Line ${visibleRange.start.line}`);
+                    PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
+                    syncStatusItem.text = `$(check) MD Sync: Active (${reason === "Exact Match" ? "Exact" : "Fallback"})`;
+                    syncStatusItem.show();
+                }
+            } else {
+                // outputChannel.appendLine(`[Sync Fail] ${reason}`);
+                if (currentDoc) {
+                    syncStatusItem.text = `$(alert) MD Sync: Mismatch`;
+                    syncStatusItem.tooltip = `Editor: ${path.basename(event.textEditor.document.fileName)}\nPreview: ${path.basename(currentDoc.fileName)}`;
+                    syncStatusItem.show();
+                }
             }
         }
     });
