@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+
 import { exportToPdf } from './pdfExport';
 
 export class PreviewPanel {
@@ -20,7 +21,6 @@ export class PreviewPanel {
         const column = vscode.ViewColumn.Beside;
         if (PreviewPanel.currentPanel) {
             PreviewPanel.currentPanel._panel.reveal(column);
-            // Don't update content if it's the same, to avoid re-render flicker
             if (PreviewPanel.currentPanel._currentDocument?.fileName !== document.fileName) {
                 PreviewPanel.currentPanel._currentDocument = document;
                 PreviewPanel.currentPanel._update();
@@ -42,9 +42,7 @@ export class PreviewPanel {
 
     public static updateContent(document: vscode.TextDocument) {
         if (PreviewPanel.currentPanel) {
-            // FIX: Prevent unnecessary re-renders on focus switch
             if (PreviewPanel.currentPanel._currentDocument?.uri.toString() === document.uri.toString()) {
-                // Same doc, do nothing (prevents scroll reset)
                 return;
             }
             PreviewPanel.currentPanel._currentDocument = document;
@@ -55,11 +53,7 @@ export class PreviewPanel {
     public static syncScroll(line: number, totalLines?: number) {
         if (PreviewPanel.currentPanel) {
             PreviewPanel.currentPanel._panel.webview.postMessage({ type: 'scrollTo', line: line, totalLines: totalLines })
-                .then(success => {
-                    if (!success) {
-                        // console.error('Failed to post message to webview');
-                    }
-                });
+                .then(success => { });
         }
     }
 
@@ -92,7 +86,8 @@ export class PreviewPanel {
                         }
                         return;
                     case 'revealLine':
-                        if (Date.now() - this._lastScrollTime > 100) {
+                        // Rate limit editor reveals slightly
+                        if (Date.now() - this._lastScrollTime > 50) {
                             this._revealLineInEditor(message.line);
                             this._lastScrollTime = Date.now();
                         }
@@ -182,7 +177,6 @@ export class PreviewPanel {
     private _getHtmlForWebview(webview: vscode.Webview): string {
         const content = this._currentDocument?.getText() || '';
         const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'preview.css'));
-        // removed scriptUri - embedding directly
         const katexCss = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'katex', 'katex.min.css'));
         const katexJs = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'katex', 'katex.min.js'));
         const highlightCss = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'github.min.css'));
@@ -191,30 +185,53 @@ export class PreviewPanel {
         const githubCss = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'github-markdown.css'));
         const escapedContent = this._escapeHtml(content);
 
-        // INLINED JS for reliability
+        // INLINED JS: Re-introducing Lerp and Anti-Echo Lock
         const inlineScript = `
         const vscode = acquireVsCodeApi();
 
-        // Toggle Red Flash for debugging
-        function flashDebug() {
-            document.body.style.backgroundColor = '#ffcccc'; // Light Red
-            setTimeout(() => {
-                document.body.style.backgroundColor = '';
-            }, 100);
-            document.body.classList.add('is-syncing');
-            setTimeout(() => {
-                document.body.classList.remove('is-syncing');
-            }, 200);
-        }
-
-        let ignoreNextScroll = false;
+        let ignoreSyncUntil = 0; // Timestamp lock
         let lastSyncSend = 0;
 
-        const scrollHandler = (e) => {
-            if (ignoreNextScroll) {
-                ignoreNextScroll = false;
-                return;
+        // LERP STATE
+        let animationFrameId = null;
+        let targetScrollY = window.scrollY;
+        let isAutoScrolling = false;
+
+        function startScrollLoop() {
+            if (animationFrameId) return;
+            function loop() {
+                if (!isAutoScrolling) {
+                    animationFrameId = null;
+                    return;
+                }
+                const currentY = window.scrollY;
+                if (isNaN(targetScrollY) || isNaN(currentY)) {
+                    isAutoScrolling = false;
+                    animationFrameId = null;
+                    return;
+                }
+                const diff = targetScrollY - currentY;
+                if (Math.abs(diff) < 1.0) {
+                    window.scrollTo({ top: targetScrollY, behavior: 'auto' });
+                    isAutoScrolling = false;
+                    animationFrameId = null;
+                    return;
+                }
+                // Factor 0.2 for smooth catch-up
+                const nextY = currentY + (diff * 0.2);
+                window.scrollTo({ top: nextY, behavior: 'auto' });
+                animationFrameId = requestAnimationFrame(loop);
             }
+            isAutoScrolling = true;
+            loop();
+        }
+
+        const scrollHandler = (e) => {
+            // If locked (due to incoming sync), ignore
+            if (Date.now() < ignoreSyncUntil) return;
+            // If currently lerping, ignore
+            if (isAutoScrolling) return;
+
             const now = Date.now();
             if (now - lastSyncSend < 50) return; 
             lastSyncSend = now;
@@ -245,15 +262,18 @@ export class PreviewPanel {
         window.addEventListener('message', event => {
             const message = event.data;
             if (message.type === 'scrollTo') {
-                flashDebug();
                 const line = message.line;
                 const newTargetY = calculateTargetY(line, message.totalLines);
                 if (!isNaN(newTargetY)) {
-                    ignoreNextScroll = true;
-                    window.scrollTo({ top: newTargetY, behavior: 'auto' });
+                    // SET LOCK: Disable outgoing sync for 500ms
+                    // This prevents the "Echo" where the preview scrolls, triggers a scroll event, and tells the editor to scroll back.
+                    ignoreSyncUntil = Date.now() + 500;
+                    
+                    targetScrollY = newTargetY;
+                    startScrollLoop();
                 }
             } else if (message.type === 'applyFormat') {
-                // handle format logic if needed here or keep minimal
+                // handle format logic if needed
             }
         });
 
@@ -262,7 +282,6 @@ export class PreviewPanel {
             if (exactEl) {
                  return exactEl.offsetTop - (window.innerHeight / 2) + (exactEl.clientHeight / 2);
             }
-            // Fallback interpolation logic
             const elements = Array.from(document.querySelectorAll('[data-line]'));
             if (elements.length > 0) {
                  const sorted = elements.map(el => ({
@@ -315,7 +334,6 @@ export class PreviewPanel {
         document.getElementById('highlightBtn').onclick = () => applyToolbarFormat('highlight');
         document.getElementById('redHighlightBtn').onclick = () => applyToolbarFormat('red-highlight');
         document.getElementById('deleteBtn').onclick = () => applyToolbarFormat('delete');
-        // FAB
         document.querySelector('.fab-export').onclick = () => exportPdf();
         `;
 
@@ -386,7 +404,6 @@ export class PreviewPanel {
         ${inlineScript}
     </script>
     <script>
-        // Updated regex
         function _inlineAddLineAttributes(sourceLines) {
             const preview = document.getElementById('preview');
             const usedLines = new Set();
