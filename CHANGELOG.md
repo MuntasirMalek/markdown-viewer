@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.50] - 2024-01-26
+
+### Fixed
+- **Clean Reset**: I removed the complex "Locking" mechanism which I suspect was getting stuck and breaking your scroll.
+- **Timestamp Gate**: Replaced the lock with a simple 1-second timer. If the preview moves the editor, the editor sleeps for 1 second. This cannot get stuck.
+- **Safe Path Check**: I restored the file check so it doesn't sync random files, but kept it loose (Case-Insensitive) so it works on your Mac.
+
 ## [1.0.49] - 2024-01-26
 
 ### Fixed
