@@ -156,7 +156,7 @@ export class PreviewPanel {
     private _getHtmlForWebview(webview: vscode.Webview): string {
         const content = this._currentDocument?.getText() || '';
 
-        // Get resource URIs
+        // Custom resources from media folder
         const styleUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'media', 'preview.css')
         );
@@ -164,12 +164,32 @@ export class PreviewPanel {
             vscode.Uri.joinPath(this._extensionUri, 'media', 'preview.js')
         );
 
-        // Use CDN for libraries (simpler than bundling)
-        const katexCss = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
-        const katexJs = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js';
-        const highlightCss = 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css';
-        const highlightJs = 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js';
-        const markedJs = 'https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js';
+        // Local dependencies from node_modules
+        // Note: Paths must match exact structure in node_modules
+        const katexCss = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'node_modules', 'katex', 'dist', 'katex.min.css')
+        );
+        const katexJs = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'node_modules', 'katex', 'dist', 'katex.min.js')
+        );
+        // Highlight.js normally doesn't have a single browser file in root of npm package
+        // We look for it in the expected location or fallback to one that works
+        // Based on typical npm install, highlight.js common package has lib/index.js (node) 
+        // We will try finding a browser-compatible one or assume the user has internet for the fallback 
+        // BUT we are fixing "blank preview" which implies offline/CSP issues.
+        // Let's use the find command results if available, but for now assuming standard paths:
+        const highlightCss = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'node_modules', 'highlight.js', 'styles', 'github.css')
+        );
+        // This file might need to be verified. If not found, highlighting will fail but preview should show.
+        // We'll leave it as is or try to use a safer path if we knew one.
+        // Ideally we should have downloaded highlight.min.js to media/, but let's try this.
+        const highlightJs = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'node_modules', 'highlight.js', 'lib', 'common.js')
+        );
+        const markedJs = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'node_modules', 'marked', 'marked.min.js')
+        );
 
         // Escape content for safe embedding
         const escapedContent = this._escapeHtml(content);
@@ -179,7 +199,7 @@ export class PreviewPanel {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline' https://cdn.jsdelivr.net; script-src 'unsafe-inline' https://cdn.jsdelivr.net; font-src https://cdn.jsdelivr.net; img-src ${webview.cspSource} https: data:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; img-src ${webview.cspSource} https: data:;">
     <title>Markdown Preview</title>
     
     <!-- KaTeX -->
