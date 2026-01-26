@@ -67,11 +67,11 @@ export class PreviewPanel {
                         this._applyFormat(message.format, message.selectedText);
                         return;
                     case 'exportPdf':
-                        // Fix: Export directly from current panel context to avoid lost focus issues
+                        // Export directly from current panel context
                         if (this._currentDocument) {
                             exportToPdf(this._extensionUri, this._currentDocument);
                         } else {
-                            vscode.window.showWarningMessage('No document to export.');
+                            vscode.window.showWarningMessage('No document to export. Please open a Markdown file.');
                         }
                         return;
                 }
@@ -191,7 +191,7 @@ export class PreviewPanel {
     <div class="markdown-body preview-content" id="preview"></div>
     <div class="floating-toolbar" id="floatingToolbar">
         <button id="boldBtn" title="Bold"><b>B</b></button>
-        <button id="highlightBtn" title="Yellow Highlight"><span style="display:inline-block;width:14px;height:14px;background:#ffe135;border-radius:50%"></span></button>
+        <button id="highlightBtn" title="Yellow Highlight"><span style="display:inline-block;width:14px;height:14px;background:#ffff00;border-radius:50%"></span></button>
         <button id="redHighlightBtn" title="Red Highlight"><span style="display:inline-block;width:14px;height:14px;background:#ff6b6b;border-radius:50%"></span></button>
         <button id="deleteBtn" title="Delete">🗑️</button>
     </div>
@@ -257,6 +257,8 @@ export class PreviewPanel {
 
         const raw = ${JSON.stringify(content)};
         document.getElementById('preview').innerHTML = renderMarkdown(raw);
+        
+        // Ensure scroll sync logic runs after rendering
         if (typeof addLineAttributes === 'function') {
             addLineAttributes(raw.split('\\n'));
         }
