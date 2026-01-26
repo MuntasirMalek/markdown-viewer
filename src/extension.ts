@@ -6,11 +6,10 @@ import { exportToPdf } from './pdfExport';
 export function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
     context.subscriptions.push(outputChannel);
-    outputChannel.appendLine('Extension Activation Started (v1.0.42).');
+    outputChannel.appendLine('Extension Activation Started (v1.0.43 - GLOBAL SYNC).');
 
     // Status Bar Item for Sync Health
     const syncStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-    syncStatusItem.command = 'markdown-viewer.showLogs'; // Optional: clicking shows logs?
     context.subscriptions.push(syncStatusItem);
 
     const openPreview = () => {
@@ -46,9 +45,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (editor && editor.document.languageId === 'markdown') {
             outputChannel.appendLine(`[Focus] Active Editor Changed: ${editor.document.fileName}`);
             PreviewPanel.updateContent(editor.document);
-
-            // Update Status Bar
-            syncStatusItem.text = "$(check) MD Sync: Ready";
+            syncStatusItem.text = "$(zap) MD Sync: Ready";
             syncStatusItem.show();
         } else {
             syncStatusItem.hide();
@@ -57,47 +54,30 @@ export function activate(context: vscode.ExtensionContext) {
 
     const scrollListener = vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
         if (event.textEditor.document.languageId === 'markdown') {
-            const currentDoc = PreviewPanel.currentDocument;
+            // NUCLEAR OPTION: NO PATH CHECKS.
+            // If a markdown file scrolls, we send the signal.
+            // This rules out identifying issues.
 
-            // Sync Validation Logic
-            let shouldSync = false;
-            let reason = "Mismatch";
-
-            if (currentDoc) {
-                const eventPath = event.textEditor.document.uri.fsPath.toLowerCase();
-                const previewPath = currentDoc.uri.fsPath.toLowerCase();
-                const eventBase = path.basename(eventPath);
-                const previewBase = path.basename(previewPath);
-
-                if (eventPath === previewPath) {
-                    shouldSync = true;
-                    reason = "Exact Match";
-                } else if (eventBase === previewBase) {
-                    shouldSync = true;
-                    reason = "Basename Match (Fallback)";
-                } else {
-                    reason = `Path Mismatch (${eventBase} != ${previewBase})`;
-                }
-            } else {
-                reason = "No Preview Doc";
-            }
-
-            // Update UI
-            if (shouldSync) {
+            // Ensure it doesn't error out if panel is closed
+            if (PreviewPanel.currentDocument) {
                 const visibleRange = event.visibleRanges[0];
                 if (visibleRange) {
-                    // outputChannel.appendLine(`[Sync] ${reason} -> Line ${visibleRange.start.line}`);
+                    // Log that we ARE sending it
+                    // outputChannel.appendLine(`[Sync FORCE] Sending Line: ${visibleRange.start.line}`);
+
                     PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
-                    syncStatusItem.text = `$(check) MD Sync: Active (${reason === "Exact Match" ? "Exact" : "Fallback"})`;
+
+                    syncStatusItem.text = `$(zap) MD Sync: Sending...`;
                     syncStatusItem.show();
+
+                    // Reset status after a clearer timeout
+                    setTimeout(() => {
+                        syncStatusItem.text = `$(check) MD Sync: Active`;
+                    }, 500);
                 }
             } else {
-                // outputChannel.appendLine(`[Sync Fail] ${reason}`);
-                if (currentDoc) {
-                    syncStatusItem.text = `$(alert) MD Sync: Mismatch`;
-                    syncStatusItem.tooltip = `Editor: ${path.basename(event.textEditor.document.fileName)}\nPreview: ${path.basename(currentDoc.fileName)}`;
-                    syncStatusItem.show();
-                }
+                syncStatusItem.text = `$(circle-slash) No Preview`;
+                syncStatusItem.show();
             }
         }
     });

@@ -72,6 +72,8 @@ const killScroll = () => {
             animationFrameId = null;
         }
         if (safetyTimeout) clearTimeout(safetyTimeout);
+        // Remove indicator
+        document.body.classList.remove('is-syncing');
     }
 };
 
@@ -88,6 +90,9 @@ window.addEventListener('keydown', userAction);
 function startScrollLoop() {
     if (animationFrameId) return;
 
+    // Visual Indicator (Tiny blue bar at top)
+    document.body.classList.add('is-syncing');
+
     // Safety: Kill auto-scroll after 3 seconds max (prevents stuck lock)
     if (safetyTimeout) clearTimeout(safetyTimeout);
     safetyTimeout = setTimeout(() => { killScroll(); }, 3000);
@@ -95,6 +100,7 @@ function startScrollLoop() {
     function loop() {
         if (!isAutoScrolling) {
             animationFrameId = null;
+            document.body.classList.remove('is-syncing');
             return;
         }
 
@@ -102,7 +108,7 @@ function startScrollLoop() {
 
         // Validation
         if (isNaN(targetScrollY) || isNaN(currentY)) {
-            killScroll(); // Abort on NaN
+            killScroll();
             return;
         }
 
@@ -113,6 +119,7 @@ function startScrollLoop() {
             window.scrollTo({ top: targetScrollY, behavior: 'auto' });
             isAutoScrolling = false;
             animationFrameId = null;
+            document.body.classList.remove('is-syncing');
             return;
         }
 
@@ -134,13 +141,8 @@ function startScrollLoop() {
 
 let lastSyncSend = 0;
 
-// 1. Preview -> Editor (User Scrolled Preview)
 const scrollHandler = (e) => {
-    // If auto-scrolling, ignore
     if (isAutoScrolling) return;
-
-    // Also ignore if recently killed (debounce echo)
-    // No, killScroll resets isAutoScrolling immediately.
 
     const now = Date.now();
     if (now - lastSyncSend < 50) return;
@@ -174,19 +176,24 @@ const scrollHandler = (e) => {
 
 window.addEventListener('scroll', scrollHandler, { capture: true });
 
-// 2. Editor -> Preview (User Scrolled Editor)
 window.addEventListener('message', event => {
     const message = event.data;
     if (message.type === 'scrollTo') {
+        // VISUAL DEBUG: Flash body slightly to prove receipt
+        // document.body.style.opacity = '0.99'; 
+        // setTimeout(() => document.body.style.opacity = '1', 50);
+
         const line = message.line;
         const totalLines = message.totalLines;
 
         let newTargetY = 0;
 
+        // Try exact match
         const exactEl = document.querySelector(`[data-line="${line}"]`);
         if (exactEl) {
             newTargetY = exactEl.offsetTop - (window.innerHeight / 2) + (exactEl.clientHeight / 2);
         } else {
+            // Interpolate
             const elements = Array.from(document.querySelectorAll('[data-line]'));
             if (elements.length > 0) {
                 const sorted = elements.map(el => ({
@@ -218,13 +225,11 @@ window.addEventListener('message', event => {
             }
         }
 
-        // Bounds & NaN Check
-        if (isNaN(newTargetY)) return; // Protection
+        if (isNaN(newTargetY)) return;
 
         const maxScroll = Math.max(0, document.body.scrollHeight - window.innerHeight);
         newTargetY = Math.max(0, Math.min(newTargetY, maxScroll));
 
-        // Only update if difference is significant
         if (Math.abs(newTargetY - targetScrollY) > 2 || !isAutoScrolling) {
             targetScrollY = newTargetY;
             if (!isAutoScrolling) {
