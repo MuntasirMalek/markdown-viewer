@@ -2,7 +2,7 @@
   "name": "markdown-viewer-enhanced",
   "displayName": "Markdown Viewer Enhanced",
   "description": "Live Markdown preview with KaTeX math, syntax highlighting, floating toolbar, and PDF export via Puppeteer",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "utsho",
   "author": {
     "name": "Utsho"
@@ -137,6 +137,9 @@
     "package": "vsce package"
   },
   "dependencies": {
+    "highlight.js": "^11.11.1",
+    "katex": "^0.16.28",
+    "marked": "^17.0.1",
     "puppeteer-core": "^22.0.0"
   },
   "devDependencies": {
