@@ -15,12 +15,16 @@
     --table-row-alt: transparent;
     --table-border: #dfe2e5;
 
-    /* Blockquote / Alert Gray Texture */
+    /* Blockquote Texture */
     --blockquote-border: #d0d7de;
     --blockquote-bg: #e9e9e9;
     /* Darker gray to match MPE texture */
-    --alert-bg: #e9e9e9;
-    /* Match blockquote texture */
+
+    /* Alert Colors (GitHub/MPE Yellow) */
+    --alert-bg: #fff5b1;
+    --alert-border: #e3b341;
+    --alert-text: #24292e;
+    --alert-icon: #856404;
 
     /* Highlight */
     --highlight-bg: #ffe135;
@@ -342,7 +346,10 @@ mark.red-highlight {
         --table-border: #3c3c3c;
         --blockquote-border: #3c3c3c;
         --blockquote-bg: #252526;
-        --alert-bg: #252526;
+        --alert-bg: #2d2d30;
+        --alert-border: #e3b341;
+        --alert-text: #d4d4d4;
+        --alert-icon: #e3b341;
         --link-color: #58a6ff;
     }
 }
@@ -360,7 +367,10 @@ body.vscode-dark {
     --table-border: #3c3c3c;
     --blockquote-border: #3c3c3c;
     --blockquote-bg: #252526;
-    --alert-bg: #252526;
+    --alert-bg: #2d2d30;
+    --alert-border: #e3b341;
+    --alert-text: #d4d4d4;
+    --alert-icon: #e3b341;
     --link-color: #58a6ff;
 }
 

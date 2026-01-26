@@ -68,14 +68,19 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
         .emoji-warning {
             display: inline-block;
             width: 95%;
-            background-color: #e9e9e9; /* Gray Texture */
-            color: inherit;
+            background-color: #fff5b1; /* Restore Pale Yellow */
+            color: #24292e;
             padding: 8px 12px;
-            border-left: 4px solid #d0d7de;
+            border-left: 4px solid #e3b341;
             border-radius: 0 2px 2px 0;
             margin: 4px 0;
             white-space: normal;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+        }
+        .emoji-warning-icon {
+            font-weight: bold;
+            margin-right: 6px;
+            color: #856404;
         }
         .emoji-warning em { font-style: normal; font-weight: 500; }
     </style>

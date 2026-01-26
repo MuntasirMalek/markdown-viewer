@@ -162,20 +162,24 @@ export class PreviewPanel {
         .toolbar-btn:hover { background: var(--vscode-button-hoverBackground); }
         .katex-display { overflow-x: auto; overflow-y: hidden; }
         
-        /* Magic Auto-Alert: Gray Texture with Plain Icon */
+        /* MPE-style Auto-Alert */
         .emoji-warning {
             display: inline-block;
             width: 95%; 
-            background-color: #e9e9e9; /* Match Blockquote Texture */
-            color: inherit;
+            background-color: #fff5b1; /* Restore Pale Yellow */
+            color: #24292e;
             padding: 8px 12px;
-            border-left: 4px solid #d0d7de;
+            border-left: 4px solid #e3b341; /* Restore Gold Border */
             border-radius: 0 2px 2px 0;
             margin: 4px 0;
             white-space: normal;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
         }
-        /* No extra icon class styling needed if proper text replacement is used */
+        .emoji-warning-icon {
+            font-weight: bold;
+            margin-right: 6px;
+            color: #856404; /* Restore Gold Icon */
+        }
         .emoji-warning em { font-style: normal; font-weight: 500; }
     </style>
 </head>
@@ -199,9 +203,8 @@ export class PreviewPanel {
             if (typeof text === 'string') {
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
                 
-                // MPE-style Auto-Alert: "Extra !" fix.
-                // Replace ⚠️ with ! and enclose in span. Do NOT add extra icon inside.
-                // Output: ! Some Text
+                // MPE-style Auto-Alert: Single Icon (Clean text replacement)
+                // Output: <span ...>! Some Text</span>
                 if (text.includes('⚠️')) {
                      text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning">! $2</span>');
                 }
