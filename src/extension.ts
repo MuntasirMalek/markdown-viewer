@@ -6,7 +6,7 @@ import { exportToPdf } from './pdfExport';
 export function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
     context.subscriptions.push(outputChannel);
-    outputChannel.appendLine('Extension Activation Started (v1.0.49 - BI-DIRECTIONAL LOCK).');
+    outputChannel.appendLine('Extension Activation Started (v1.0.50).');
 
     // Status Bar Item for Sync Health
     const syncStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -53,18 +53,35 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    // SCROLL THROTTLING & LOCKING
+    // SCROLL THROTTLING
     let lastScrollTime = 0;
 
     const scrollListener = vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
         if (event.textEditor.document.languageId === 'markdown') {
 
-            // CHECK LOCK: If preview is scrolling us, DON'T echo back!
-            if (PreviewPanel.isSyncingFromPreview) {
+            // 1. TIMESTAMP GATE (Replacing Boolean Lock)
+            // If the preview scrolled the editor recently (< 1000ms), ignore this curve.
+            if (Date.now() - PreviewPanel.lastRemoteScrollTime < 1000) {
                 return;
             }
 
-            // THROTTLE: 50ms (20fps)
+            // 2. PATH CHECK (Restored but Safe)
+            // Prevent syncing unrelated files
+            const currentDoc = PreviewPanel.currentDocument;
+            let shouldSync = false;
+
+            if (currentDoc) {
+                const eventPath = event.textEditor.document.uri.fsPath.toLowerCase();
+                const previewPath = currentDoc.uri.fsPath.toLowerCase();
+                // Relaxed check: Same Full Path OR Same Basename
+                if (eventPath === previewPath || path.basename(eventPath) === path.basename(previewPath)) {
+                    shouldSync = true;
+                }
+            }
+
+            if (!shouldSync) return;
+
+            // 3. THROTTLE
             const now = Date.now();
             if (now - lastScrollTime < 50) {
                 return;

@@ -6,10 +6,8 @@ import { exportToPdf } from './pdfExport';
 export class PreviewPanel {
     public static currentPanel: PreviewPanel | undefined;
 
-    // SYNC LOCK (Bi-Directional)
-    // When true, the extension ignores scroll events from the editor
-    // because they are likely caused by the preview syncing the editor.
-    public static isSyncingFromPreview = false;
+    // TIMESTAMP LOCK
+    public static lastRemoteScrollTime = 0;
 
     private static readonly viewType = 'markdownViewerPreview';
 
@@ -95,7 +93,6 @@ export class PreviewPanel {
                         }
                         return;
                     case 'revealLine':
-                        // Rate limit slightly
                         if (Date.now() - this._lastScrollTime > 50) {
                             this._revealLineInEditor(message.line);
                             this._lastScrollTime = Date.now();
@@ -114,16 +111,11 @@ export class PreviewPanel {
             e => e.document.uri.toString() === this._currentDocument?.uri.toString()
         );
         if (editor) {
-            // SET LOCK
-            PreviewPanel.isSyncingFromPreview = true;
+            // SET LOCK TIMESTAMP
+            PreviewPanel.lastRemoteScrollTime = Date.now();
 
             const range = new vscode.Range(line, 0, line, 0);
             editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
-
-            // RELEASE LOCK (After animation settles)
-            setTimeout(() => {
-                PreviewPanel.isSyncingFromPreview = false;
-            }, 600); // 600ms to be safe
         }
     }
 
