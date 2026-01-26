@@ -68,7 +68,7 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
         .emoji-warning {
             display: inline-block;
             width: 95%;
-            background-color: #fff5b1;
+            background-color: transparent; /* No background */
             color: #24292f;
             padding: 8px 12px;
             border-left: 4px solid #e3b341;

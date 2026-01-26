@@ -13,7 +13,8 @@
     /* Table colors - MPE Plain Style (Transparent) */
     --table-header-bg: transparent;
     --table-row-alt: transparent;
-    --table-border: #d0d7de;
+    --table-border: #dfe2e5;
+    /* Lighter border to match MPE */
 
     /* Blockquote */
     --blockquote-border: #d0d7de;
@@ -38,7 +39,8 @@
     box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
     height: 100%;
     overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -74,7 +76,12 @@ html, body {
 }
 
 /* ===== Typography ===== */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
     margin-top: 24px;
     margin-bottom: 16px;
     font-weight: 600;
@@ -171,7 +178,8 @@ blockquote p:last-child {
 }
 
 /* ===== Lists ===== */
-ul, ol {
+ul,
+ol {
     margin-bottom: 16px;
     padding-left: 2em;
 }
@@ -180,8 +188,8 @@ li {
     margin-bottom: 4px;
 }
 
-li > ul,
-li > ol {
+li>ul,
+li>ol {
     margin-top: 4px;
     margin-bottom: 0;
 }
@@ -195,7 +203,8 @@ table {
     display: block;
 }
 
-th, td {
+th,
+td {
     border: 1px solid var(--table-border);
     padding: 8px 12px;
     text-align: left;
@@ -207,7 +216,8 @@ th {
 }
 
 tr:nth-child(even) {
-    background: var(--table-row-alt); /* Default matches var which is now transparent */
+    background: var(--table-row-alt);
+    /* Default matches var which is now transparent */
 }
 
 /* ===== Horizontal Rules ===== */

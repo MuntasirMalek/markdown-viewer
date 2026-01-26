@@ -162,14 +162,14 @@ export class PreviewPanel {
         .toolbar-btn:hover { background: var(--vscode-button-hoverBackground); }
         .katex-display { overflow-x: auto; overflow-y: hidden; }
         
-        /* Magic Auto-Alert: Exact MPE Style Imitation */
+        /* Magic Auto-Alert: Transparent Background */
         .emoji-warning {
             display: inline-block;
             width: 95%; 
-            background-color: #fff5b1;
+            background-color: transparent; /* Changed from yellow to transparent to remove "highlight" */
             color: #24292e;
             padding: 8px 12px;
-            border-left: 4px solid #e3b341;
+            border-left: 4px solid #e3b341; /* Keep yellow border */
             border-radius: 0 2px 2px 0;
             margin: 4px 0;
             white-space: normal;
@@ -178,7 +178,7 @@ export class PreviewPanel {
         .emoji-warning-icon {
             font-weight: bold;
             margin-right: 6px;
-            color: #856404; /* Darker yellow/brown for icon */
+            color: #856404;
         }
         .emoji-warning em { font-style: normal; font-weight: 500; }
     </style>
@@ -201,10 +201,6 @@ export class PreviewPanel {
         renderer.text = function(token) {
             let text = token.text || token;
             if (typeof text === 'string') {
-                // Also remove ==highlight== support here since we removed it from preview.js
-                // text = text.replace(/==([^=]+)==/g, '<mark>$1</mark>'); 
-                // We keep it commented in case user wants it back via setting later
-                
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
                 
                 // MPE-style Auto-Alert: Replace ⚠️ with ! and style
