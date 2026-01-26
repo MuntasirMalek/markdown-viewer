@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.25] - 2024-01-26
+
+### Fixed
+- **PDF Export**: Switched to static import for `puppeteer-core` to guarantee dependency inclusion in the extension package.
+- **Scroll Sync**: Added a percentage-based fallback for scroll synchronization. If line matching fails (e.g. valid markdown lines not producing blocks), the preview now scrolls proportionally to keep you in context.
+
 ## [1.0.24] - 2024-01-26
 
 ### Fixed

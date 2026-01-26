@@ -39,9 +39,9 @@ export class PreviewPanel {
         }
     }
 
-    public static syncScroll(line: number) {
+    public static syncScroll(line: number, totalLines?: number) {
         if (PreviewPanel.currentPanel) {
-            PreviewPanel.currentPanel._panel.webview.postMessage({ type: 'scrollTo', line: line });
+            PreviewPanel.currentPanel._panel.webview.postMessage({ type: 'scrollTo', line: line, totalLines: totalLines });
         }
     }
 
@@ -198,8 +198,7 @@ export class PreviewPanel {
             const blockElements = preview.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote > p, pre, .katex-display, table, .emoji-warning');
             blockElements.forEach(el => {
                 const elText = el.textContent.trim();
-                if (!elText || elText.length < 2) return;
-                // Normalize text by removing non-alphanumeric chars for robust matching
+                // Normalized alphanumeric+bangla replacement
                 const cleanElText = elText.replace(/[^a-zA-Z0-9\\u0980-\\u09ff]+/g, '');
                 if (cleanElText.length < 2) return;
 
@@ -271,17 +270,34 @@ export class PreviewPanel {
         const raw = ${JSON.stringify(content)};
         document.getElementById('preview').innerHTML = renderMarkdown(raw);
         
-        // Execute Inline Sync Logic
         _inlineAddLineAttributes(raw.split('\\n'));
         
-        // Ensure message listener for scroll is attached if not already
         if (!window._messageListenerAttached) {
              window.addEventListener('message', event => {
                 const message = event.data;
                 if (message.type === 'scrollTo') {
                     const line = message.line;
+                    const totalLines = message.totalLines;
                     const el = document.querySelector(\`[data-line="\${line}"]\`);
-                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else if (totalLines) {
+                        // Fallback: Percentage Scroll
+                        const preview = document.getElementById('preview');
+                        if (preview) {
+                             const pct = line / totalLines;
+                             // Scroll main window or preview container?
+                             // CSS has .preview-content { overflow-y: auto } at body level or #preview.
+                             // Actually user CSS has body { overflow: hidden } and .preview-content { overflow-y: auto }
+                             // So we scroll the .preview-content
+                             const container = document.querySelector('.preview-content');
+                             if (container) {
+                                 container.scrollTop = pct * (container.scrollHeight - container.clientHeight);
+                             } else {
+                                 window.scrollTo(0, pct * document.body.scrollHeight);
+                             }
+                        }
+                    }
                 }
              });
              window._messageListenerAttached = true;

@@ -2,26 +2,9 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-
-let puppeteer: typeof import('puppeteer-core') | undefined;
-
-// Robust require for puppeteer-core
-try {
-    puppeteer = require('puppeteer-core');
-} catch (e) {
-    // Fallback: try to resolve from extension/node_modules if bundled weirdly
-    try {
-        const extPath = vscode.extensions.getExtension('utsho.markdown-viewer-enhanced')?.extensionPath;
-        if (extPath) {
-            const localPath = path.join(extPath, 'node_modules', 'puppeteer-core');
-            if (fs.existsSync(localPath)) {
-                puppeteer = require(localPath);
-            }
-        }
-    } catch (e2) {
-        console.error('Failed to load puppeteer-core:', e);
-    }
-}
+// Static import to ensure bundler sees it.
+// We lazily use it, but import it to force inclusion.
+import * as puppeteerCore from 'puppeteer-core';
 
 function findChromePath(): string | undefined {
     const config = vscode.workspace.getConfiguration('markdownViewer');
@@ -159,9 +142,9 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
     const outputChannel = ext?.exports?.outputChannel;
     if (outputChannel) outputChannel.appendLine(`[${new Date().toISOString()}] Starting PDF export for ${document.fileName}`);
 
-    // Check puppeteer
-    if (!puppeteer) {
-        vscode.window.showErrorMessage('PDF export requires "puppeteer-core". Failed to load dependency.');
+    // Puppeteer should be available via static import
+    if (!puppeteerCore) {
+        vscode.window.showErrorMessage('PDF export requires "puppeteer-core". Dependency not loaded.');
         return;
     }
 
@@ -181,7 +164,7 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
             // Log Puppeteer logic
             if (outputChannel) outputChannel.appendLine('Launching Puppeteer...');
 
-            const browser = await puppeteer!.launch({ headless: true, executablePath: chromePath, args: ['--no-sandbox'] });
+            const browser = await puppeteerCore.launch({ headless: true, executablePath: chromePath, args: ['--no-sandbox'] });
             const page = await browser.newPage();
             const html = generateHtmlForPdf(document.getText(), extensionUri);
             await page.setContent(html, { waitUntil: ['networkidle0', 'domcontentloaded'], timeout: 60000 });

@@ -48,7 +48,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (event.textEditor.document.languageId === 'markdown') {
             const visibleRange = event.visibleRanges[0];
             if (visibleRange) {
-                PreviewPanel.syncScroll(visibleRange.start.line);
+                PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
             }
         }
     });
