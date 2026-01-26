@@ -102,15 +102,33 @@ export class PreviewPanel {
     }
 
     private _applyFormat(format: string, selectedText: string) {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor || !selectedText) return;
+        if (!this._currentDocument) {
+            vscode.window.showWarningMessage('No active document found for markdown preview.');
+            return;
+        }
+
+        // Find the editor for the current document (activeTextEditor might be undefined if focus is in webview)
+        const editor = vscode.window.visibleTextEditors.find(
+            e => e.document.uri.toString() === this._currentDocument?.uri.toString()
+        );
+
+        if (!editor) {
+            vscode.window.showWarningMessage('Could not find the editor for this preview. Please ensure the markdown file is open.');
+            return;
+        }
+
+        if (!selectedText) return;
 
         const document = editor.document;
         const text = document.getText();
 
         // Find the selected text in the document
+        // This is a simple exact match. If markdown rendering significantly differs, this might fail unless selectedText is unique.
         const index = text.indexOf(selectedText);
-        if (index === -1) return;
+        if (index === -1) {
+            vscode.window.showWarningMessage('Could not find exactly matching text in source. Try selecting distinct text.');
+            return;
+        }
 
         const startPos = document.positionAt(index);
         const endPos = document.positionAt(index + selectedText.length);
