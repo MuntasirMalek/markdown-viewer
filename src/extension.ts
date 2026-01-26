@@ -6,7 +6,7 @@ import { exportToPdf } from './pdfExport';
 export function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
     context.subscriptions.push(outputChannel);
-    outputChannel.appendLine('Extension Activation Started (v1.0.48 - THROTTLED).');
+    outputChannel.appendLine('Extension Activation Started (v1.0.49 - BI-DIRECTIONAL LOCK).');
 
     // Status Bar Item for Sync Health
     const syncStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -53,15 +53,18 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    // SCROLL THROTTLING
+    // SCROLL THROTTLING & LOCKING
     let lastScrollTime = 0;
 
     const scrollListener = vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
         if (event.textEditor.document.languageId === 'markdown') {
 
-            // THROTTLE: 50ms Limit
-            // This prevents flooding the WebView with hundreds of messages per second on fast scroll,
-            // which was likely causing the "Not Responding" freeze and the broken/laggy sync.
+            // CHECK LOCK: If preview is scrolling us, DON'T echo back!
+            if (PreviewPanel.isSyncingFromPreview) {
+                return;
+            }
+
+            // THROTTLE: 50ms (20fps)
             const now = Date.now();
             if (now - lastScrollTime < 50) {
                 return;
@@ -71,10 +74,6 @@ export function activate(context: vscode.ExtensionContext) {
             const visibleRange = event.visibleRanges[0];
             if (visibleRange) {
                 PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
-
-                // Only update StatusBar occasionally to avoid UI flicker/load
-                // We don't need to show 'Active' every 50ms.
-                // Just let it be.
             }
         }
     });
