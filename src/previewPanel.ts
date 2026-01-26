@@ -75,6 +75,9 @@ export class PreviewPanel {
                     case 'alert':
                         vscode.window.showInformationMessage(message.text);
                         return;
+                    case 'error': // ERROR REPORTING
+                        vscode.window.showErrorMessage(`Preview Error: ${message.text}`);
+                        return;
                     case 'applyFormat':
                         this._applyFormat(message.format, message.selectedText);
                         return;
@@ -86,7 +89,6 @@ export class PreviewPanel {
                         }
                         return;
                     case 'revealLine':
-                        // Rate limit editor reveals slightly
                         if (Date.now() - this._lastScrollTime > 50) {
                             this._revealLineInEditor(message.line);
                             this._lastScrollTime = Date.now();
@@ -185,52 +187,20 @@ export class PreviewPanel {
         const githubCss = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'github-markdown.css'));
         const escapedContent = this._escapeHtml(content);
 
-        // INLINED JS: Re-introducing Lerp and Anti-Echo Lock
+        // INLINED JS: Native Scroll + Error Handling
         const inlineScript = `
         const vscode = acquireVsCodeApi();
 
-        let ignoreSyncUntil = 0; // Timestamp lock
+        // GLOBAL ERROR HANDLER
+        window.onerror = function(message, source, lineno, colno, error) {
+            vscode.postMessage({ type: 'error', text: \`\${message} at line \${lineno}\` });
+        };
+
+        let ignoreSyncUntil = 0; // Timestamp lock for anti-echo
         let lastSyncSend = 0;
 
-        // LERP STATE
-        let animationFrameId = null;
-        let targetScrollY = window.scrollY;
-        let isAutoScrolling = false;
-
-        function startScrollLoop() {
-            if (animationFrameId) return;
-            function loop() {
-                if (!isAutoScrolling) {
-                    animationFrameId = null;
-                    return;
-                }
-                const currentY = window.scrollY;
-                if (isNaN(targetScrollY) || isNaN(currentY)) {
-                    isAutoScrolling = false;
-                    animationFrameId = null;
-                    return;
-                }
-                const diff = targetScrollY - currentY;
-                if (Math.abs(diff) < 1.0) {
-                    window.scrollTo({ top: targetScrollY, behavior: 'auto' });
-                    isAutoScrolling = false;
-                    animationFrameId = null;
-                    return;
-                }
-                // Factor 0.2 for smooth catch-up
-                const nextY = currentY + (diff * 0.2);
-                window.scrollTo({ top: nextY, behavior: 'auto' });
-                animationFrameId = requestAnimationFrame(loop);
-            }
-            isAutoScrolling = true;
-            loop();
-        }
-
         const scrollHandler = (e) => {
-            // If locked (due to incoming sync), ignore
             if (Date.now() < ignoreSyncUntil) return;
-            // If currently lerping, ignore
-            if (isAutoScrolling) return;
 
             const now = Date.now();
             if (now - lastSyncSend < 50) return; 
@@ -265,15 +235,14 @@ export class PreviewPanel {
                 const line = message.line;
                 const newTargetY = calculateTargetY(line, message.totalLines);
                 if (!isNaN(newTargetY)) {
-                    // SET LOCK: Disable outgoing sync for 500ms
-                    // This prevents the "Echo" where the preview scrolls, triggers a scroll event, and tells the editor to scroll back.
+                    // LOCK OUTGOING SYNC
                     ignoreSyncUntil = Date.now() + 500;
                     
-                    targetScrollY = newTargetY;
-                    startScrollLoop();
+                    // NATIVE SCROLL (Robust)
+                    window.scrollTo({ top: newTargetY, behavior: 'auto' });
                 }
             } else if (message.type === 'applyFormat') {
-                // handle format logic if needed
+                // handle format logic
             }
         });
 
