@@ -6,14 +6,18 @@ export function activate(context: vscode.ExtensionContext) {
     console.log('Markdown Viewer Enhanced is now active!');
 
     // Register preview command
-    const previewCommand = vscode.commands.registerCommand('markdown-viewer.preview', () => {
+    const openPreview = () => {
         const editor = vscode.window.activeTextEditor;
         if (editor && editor.document.languageId === 'markdown') {
             PreviewPanel.createOrShow(context.extensionUri, editor.document);
         } else {
             vscode.window.showWarningMessage('Please open a Markdown file first.');
         }
-    });
+    };
+
+    const previewCommand = vscode.commands.registerCommand('markdown-viewer.preview', openPreview);
+    const compatPreviewSide = vscode.commands.registerCommand('markdown-preview-enhanced.openPreviewToTheSide', openPreview);
+    const compatPreview = vscode.commands.registerCommand('markdown-preview-enhanced.openPreview', openPreview);
 
     // Register PDF export command
     const exportPdfCommand = vscode.commands.registerCommand('markdown-viewer.exportPdf', async () => {
@@ -51,6 +55,8 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         previewCommand,
+        compatPreviewSide,
+        compatPreview,
         exportPdfCommand,
         documentChangeListener,
         editorChangeListener,
