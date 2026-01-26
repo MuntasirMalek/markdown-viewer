@@ -53,31 +53,70 @@ function exportPdf() {
     vscode.postMessage({ type: 'exportPdf' });
 }
 
-// BINDIRECTIONAL SYNC: Capture-Phase Listener to catch ALL scrolls
+// BINDIRECTIONAL SYNC: Smooth & Accurate
+// We'll use a smoother, debounced scroll handling
+let isSyncing = false; // Flag to prevent echo loops
 let scrollTimeout;
+
 const scrollHandler = () => {
+    if (isSyncing) return; // Ignore scrolls triggered by sync
+
     if (scrollTimeout) clearTimeout(scrollTimeout);
     scrollTimeout = setTimeout(() => {
         const elements = document.querySelectorAll('[data-line]');
         let targetLine = 0;
-        // Find best match in top half of screen
+        let minDist = Infinity;
+
+        // Find line closest to top of viewport
+        const viewTop = 0;
+
         for (let el of elements) {
             const rect = el.getBoundingClientRect();
-            if (rect.top >= 0 && rect.top < window.innerHeight / 2) {
+            // We want elements near the top, but not way above
+            const dist = Math.abs(rect.top - viewTop);
+
+            // Check if element is roughly at the top (say within 300px)
+            if (dist < minDist && rect.top < window.innerHeight / 2) {
+                minDist = dist;
                 targetLine = parseInt(el.getAttribute('data-line'));
-                break;
             }
         }
+
         if (targetLine > 0) {
             vscode.postMessage({
                 type: 'revealLine',
                 line: targetLine
             });
         }
-    }, 100);
+    }, 50); // Faster response than 150ms
 };
 
-// Attack the listener to everything possible with capture
 window.addEventListener('scroll', scrollHandler, { capture: true });
 document.addEventListener('scroll', scrollHandler, { capture: true });
 document.body.addEventListener('scroll', scrollHandler, { capture: true });
+
+// Listener for scroll commands from Extension (Preview Scroll)
+window.addEventListener('message', event => {
+    const message = event.data;
+    if (message.type === 'scrollTo') {
+        const line = message.line;
+        const totalLines = message.totalLines;
+
+        // Try strict line match
+        const el = document.querySelector(`[data-line="${line}"]`);
+
+        isSyncing = true; // Set flag
+
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else if (totalLines) {
+            // Percentage Fallback
+            const pct = line / totalLines;
+            const targetY = pct * document.body.scrollHeight;
+            window.scrollTo({ top: targetY, behavior: 'smooth' });
+        }
+
+        // Release flag after animation
+        setTimeout(() => { isSyncing = false; }, 600);
+    }
+});

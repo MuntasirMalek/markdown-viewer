@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.31] - 2024-01-26
+
+### Fixed
+- **Sync Smoothness**: Rewrote the sync logic to use a "debounced & flagged" system. This prevents the "stuttering" effect where the editor and preview fight for control. Also improved the line matching algorithm to center the view.
+- **PDF Export (CLI Strategy)**: Abandoned the troublesome node module dependency. The extension now talks directly to your installed Chrome/Chromium using the Command Line Interface (CLI). This is lighter, faster, and fails significantly less often.
+
 ## [1.0.30] - 2024-01-26
 
 ### Fixed

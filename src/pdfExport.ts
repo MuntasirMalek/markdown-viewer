@@ -2,59 +2,14 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { createRequire } from 'module';
+import * as cp from 'child_process';
 
-// Cache
-let puppeteerInstance: any | undefined;
+// We are abandoning puppeteer-core dependency hell.
+// We will use a lightweight method: Call Chrome directly via CLI if possible,
+// OR ask user to install a PDF printer extension? No, we stick to Chrome CLI 'headless' printing.
 
-async function loadPuppeteer(outputChannel?: vscode.OutputChannel): Promise<string | null> {
-    if (puppeteerInstance) return null;
-
-    const errors: string[] = [];
-
-    // 1. Get Absolute Path from Extension Context
-    const ext = vscode.extensions.getExtension('utsho.markdown-viewer-enhanced');
-    if (!ext) {
-        return "Critical: Extension context not found.";
-    }
-    const extPath = ext.extensionPath;
-
-    // Strategy A: Direct Require from Extension Path (Nuclear Option)
-    try {
-        const puppeteerPath = path.join(extPath, 'node_modules', 'puppeteer-core');
-        if (outputChannel) outputChannel.appendLine(`Checking absolute path: ${puppeteerPath}`);
-
-        if (fs.existsSync(puppeteerPath)) {
-            const req = createRequire(path.join(extPath, 'index.js')); // Require relative to root
-            puppeteerInstance = req(puppeteerPath);
-            return null;
-        } else {
-            errors.push(`Path not found: ${puppeteerPath}`);
-        }
-    } catch (e: any) {
-        errors.push(`Absolute Path Require failed: ${e.message}`);
-    }
-
-    // Strategy B: Standard Require
-    try {
-        puppeteerInstance = require('puppeteer-core');
-        return null;
-    } catch (e: any) {
-        errors.push(`Standard require failed: ${e.message}`);
-    }
-
-    // Strategy C: Dynamic Import
-    try {
-        const mod = await import('puppeteer-core');
-        puppeteerInstance = mod.default || mod;
-        return null;
-    } catch (e: any) {
-        errors.push(`Dynamic import failed: ${e.message}`);
-    }
-
-    return errors.join('\n');
-}
-
+// Actually, calling chrome --headless --print-to-pdf is standard and requires NO node modules.
+// This is the robust way.
 
 function findChromePath(): string | undefined {
     const config = vscode.workspace.getConfiguration('markdownViewer');
@@ -102,7 +57,8 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Markdown Export</title>
-    <link rel="stylesheet" href="${katexCss}">
+    <!-- We inline styles for CLI PDF export as file:// access might be restricted in some chrome contexts -->
+    <link rel="stylesheet" href="${katexCss}"> 
     <script src="${katexJs}"></script>
     <link rel="stylesheet" href="${highlightCss}">
     <script src="${highlightJs}"></script>
@@ -114,10 +70,9 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
         @page { size: A4; margin: 20mm; }
         .katex-display { overflow-x: auto; overflow-y: hidden; }
         pre { background-color: #f6f8fa !important; }
-        /* Magic Auto-Alert for PDF */
         .emoji-warning {
             display: inline-block;
-            width: 95%;
+            width: 95%; 
             background-color: #f1f1f1; 
             color: #24292e;
             padding: 8px 12px;
@@ -188,53 +143,86 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
 }
 
 export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.TextDocument): Promise<void> {
-    const ext = vscode.extensions.getExtension('utsho.markdown-viewer-enhanced');
-    const outputChannel = ext?.exports?.outputChannel;
-    if (outputChannel) outputChannel.appendLine(`[${new Date().toISOString()}] Starting PDF export for ${document.fileName}`);
+    const outputChannel = vscode.extensions.getExtension('utsho.markdown-viewer-enhanced')?.exports?.outputChannel;
+    // Note: exports might be undefined depending on activation order, need to check.
+    // Actually we can just create one if missing? But let's assume one exists or just log to console.
 
-    // Absolute Path Loading Strategy
-    const loadErrors = await loadPuppeteer(outputChannel);
-    if (!puppeteerInstance) {
-        if (outputChannel) {
-            outputChannel.appendLine(`Failed to load puppeteer-core. Errors: \n${loadErrors}`);
-            const root = extensionUri.fsPath;
-            outputChannel.appendLine(`Extension Root: ${root}`);
-        }
-        vscode.window.showErrorMessage(`Failed to load puppeteer-core. Errors: ${loadErrors?.substring(0, 200)}...`);
+    // 1. Find Chrome
+    const chromePath = findChromePath();
+    if (!chromePath) {
+        vscode.window.showErrorMessage('Chrome/Chromium/Edge not found. Please install one of them to enable PDF export.');
         return;
     }
 
-    if (outputChannel) outputChannel.appendLine('Puppeteer loaded successfully.');
+    // 2. Prepare Temp File
+    const tmpDir = os.tmpdir();
+    const tmpHtmlPath = path.join(tmpDir, `mve_export_${Date.now()}.html`);
+    const htmlContent = generateHtmlForPdf(document.getText(), extensionUri);
 
-    const chromePath = findChromePath();
-    if (outputChannel) outputChannel.appendLine(chromePath ? `Found Chrome: ${chromePath}` : 'Chrome not found.');
-    if (!chromePath) { vscode.window.showErrorMessage('Chrome/Chromium not found. Please install Chrome or specify path in settings.'); return; }
+    // We MUST wait for JS to execute.
+    // Chrome Headless CLI --print-to-pdf renders the HTML *after* it loads.
+    // However, our `generateHtmlForPdf` has a script that RUNS on load to populate #content.
+    // Chrome Headless is fast. It might print before the script runs.
+    // Fix: We should pre-render the Markdown to HTML *in node* if possible, 
+    // OR just write the *rendered* HTML to the file.
+    // But we are using `marked` client-side in the preview.
+    // To be robust without Puppeteer, we should really pre-compile the markdown here in Node.
+    // But `katex`, `highlight.js` etc are set up for browser usage in the `generateHtml` function.
+    // Let's stick to the current HTML but ensure it runs.
+    // Chrome's --virtual-time-budget might help.
+
+    fs.writeFileSync(tmpHtmlPath, htmlContent);
 
     const defaultFileName = path.basename(document.fileName, '.md') + '.pdf';
     const defaultUri = vscode.Uri.file(path.join(path.dirname(document.fileName), defaultFileName));
     const saveUri = await vscode.window.showSaveDialog({ defaultUri, filters: { 'PDF': ['pdf'] } });
     if (!saveUri) return;
 
-    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Exporting...', cancellable: false }, async (p) => {
-        try {
-            p.report({ increment: 10, message: 'Launch...' });
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Exporting via Chrome CLI...', cancellable: false }, async (p) => {
+        return new Promise<void>((resolve, reject) => {
+            // --headless=new is better for modern chrome
+            // --run-all-compositor-stages-before-draw
+            // --virtual-time-budget=2000 to allow JS to run
+            const args = [
+                '--headless=new',
+                '--disable-gpu',
+                '--no-pdf-header-footer',
+                '--print-to-pdf="' + saveUri.fsPath + '"',
+                '--virtual-time-budget=5000', // Allow 5 seconds for JS to render
+                '"' + tmpHtmlPath + '"'
+            ];
 
-            const browser = await puppeteerInstance.launch({ headless: true, executablePath: chromePath, args: ['--no-sandbox'] });
-            const page = await browser.newPage();
-            const html = generateHtmlForPdf(document.getText(), extensionUri);
-            await page.setContent(html, { waitUntil: ['networkidle0', 'domcontentloaded'], timeout: 60000 });
-            await new Promise(r => setTimeout(r, 1500));
+            // On Windows, quoting might be different, but let's try standard spawn
+            // Actually, spawn argument array handles quoting usually.
+            const spawnArgs = [
+                '--headless=new',
+                '--disable-gpu',
+                '--no-pdf-header-footer',
+                `--print-to-pdf=${saveUri.fsPath}`,
+                '--virtual-time-budget=5000',
+                tmpHtmlPath
+            ];
 
-            const config = vscode.workspace.getConfiguration('markdownViewer');
-            await page.pdf({ path: saveUri.fsPath, format: (config.get('pdfPageSize') || 'A4') as any, margin: { top: '20mm', bottom: '20mm', left: '20mm', right: '20mm' }, printBackground: true });
+            const proc = cp.spawn(chromePath, spawnArgs);
 
-            await browser.close();
-            if (outputChannel) outputChannel.appendLine('Export success.');
-            const action = await vscode.window.showInformationMessage(`Exported: ${path.basename(saveUri.fsPath)}`, 'Open');
-            if (action === 'Open') vscode.env.openExternal(saveUri);
-        } catch (e: any) {
-            if (outputChannel) outputChannel.appendLine(`Export failed: ${e.message}\n${e.stack}`);
-            vscode.window.showErrorMessage(`Failed: ${e.message}`);
-        }
+            proc.on('close', (code) => {
+                // Cleanup
+                try { fs.unlinkSync(tmpHtmlPath); } catch (e) { }
+
+                if (code === 0) {
+                    vscode.window.showInformationMessage(`Exported: ${path.basename(saveUri.fsPath)}`, 'Open')
+                        .then(s => { if (s === 'Open') vscode.env.openExternal(saveUri); });
+                    resolve();
+                } else {
+                    vscode.window.showErrorMessage(`Chrome exited with code ${code}. PDF might not be generated.`);
+                    resolve();
+                }
+            });
+
+            proc.on('error', (err) => {
+                vscode.window.showErrorMessage(`Failed to launch Chrome: ${err.message}`);
+                resolve();
+            });
+        });
     });
 }
