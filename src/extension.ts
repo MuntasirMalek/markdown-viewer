@@ -3,12 +3,10 @@ import { PreviewPanel } from './previewPanel';
 import { exportToPdf } from './pdfExport';
 
 export function activate(context: vscode.ExtensionContext) {
-    // Create output channel
     const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
     context.subscriptions.push(outputChannel);
     outputChannel.appendLine('Extension Activation Started.');
 
-    // Register preview command
     const openPreview = () => {
         const editor = vscode.window.activeTextEditor;
         if (editor && editor.document.languageId === 'markdown') {
@@ -23,7 +21,6 @@ export function activate(context: vscode.ExtensionContext) {
     const compatPreviewSide = vscode.commands.registerCommand('markdown-preview-enhanced.openPreviewToTheSide', openPreview);
     const compatPreview = vscode.commands.registerCommand('markdown-preview-enhanced.openPreview', openPreview);
 
-    // Register PDF export command
     const exportPdfCommand = vscode.commands.registerCommand('markdown-viewer.exportPdf', async () => {
         const editor = vscode.window.activeTextEditor;
         if (editor && editor.document.languageId === 'markdown') {
@@ -33,14 +30,12 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    // Listen for text document changes
     const documentChangeListener = vscode.workspace.onDidChangeTextDocument((event) => {
         if (event.document.languageId === 'markdown') {
             PreviewPanel.updateContent(event.document);
         }
     });
 
-    // Listen for active editor changes
     const editorChangeListener = vscode.window.onDidChangeActiveTextEditor((editor) => {
         if (editor && editor.document.languageId === 'markdown') {
             outputChannel.appendLine(`Active Editor Changed: ${editor.document.fileName}`);
@@ -48,26 +43,19 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    // Listen for scroll changes in editor to sync with preview
     const scrollListener = vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
         if (event.textEditor.document.languageId === 'markdown') {
             const currentDoc = PreviewPanel.currentDocument;
 
-            // DEBUG LOG
-            /*
-            outputChannel.appendLine(`Scroll Event: ${event.textEditor.document.fileName}`);
-            if (currentDoc) {
-                outputChannel.appendLine(`Current Preview Doc: ${currentDoc.fileName}`);
-                outputChannel.appendLine(`Match? ${event.textEditor.document.uri.toString() === currentDoc.uri.toString()}`);
-            } else {
-                outputChannel.appendLine('No Current Preview Doc.');
-            }
-            */
+            // DEBUG: Uncomment to trace sync validation checks
+            // if (currentDoc) {
+            //    outputChannel.appendLine(`Check: ${event.textEditor.document.fileName} vs ${currentDoc.fileName}`);
+            // }
 
-            if (currentDoc && event.textEditor.document.uri.toString() === currentDoc.uri.toString()) {
+            // FIXED: Use fsPath comparison to avoid encoding/scheme/case mismatches
+            if (currentDoc && event.textEditor.document.uri.fsPath === currentDoc.uri.fsPath) {
                 const visibleRange = event.visibleRanges[0];
                 if (visibleRange) {
-                    // outputChannel.appendLine(`Syncing to line: ${visibleRange.start.line}`);
                     PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
                 }
             }
@@ -84,9 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
         scrollListener
     );
 
-    // Assign output channel to exports for PDF module
-    const exports = { outputChannel };
-    return exports;
+    return { outputChannel };
 }
 
 export function deactivate() {

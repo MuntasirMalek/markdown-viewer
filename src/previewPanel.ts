@@ -231,8 +231,6 @@ export class PreviewPanel {
     </style>
 </head>
 <body>
-    <!-- Top toolbar removed here -->
-    
     <button class="fab-export" onclick="exportPdf()" title="Export to PDF">📄</button>
 
     <div class="markdown-body preview-content" id="preview"></div>
@@ -245,19 +243,20 @@ export class PreviewPanel {
     <script id="markdown-content" type="text/plain">${escapedContent}</script>
     <script src="${scriptUri}"></script>
     <script>
+        // Updated: Safer Regex that triggers on any partial match after stripping whitespace
         function _inlineAddLineAttributes(sourceLines) {
             const preview = document.getElementById('preview');
             const usedLines = new Set();
             const blockElements = preview.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote > p, pre, .katex-display, table, .emoji-warning');
             blockElements.forEach(el => {
                 const elText = el.textContent.trim();
-                const cleanElText = elText.replace(/[^a-zA-Z0-9\\u0980-\\u09ff]+/g, '');
+                const cleanElText = elText.replace(/\\s+/g, ''); // Simple whitespace strip
                 if (cleanElText.length < 2) return;
 
                 for (let i = 0; i < sourceLines.length; i++) {
                      if (usedLines.has(i)) continue;
                      const srcLine = sourceLines[i];
-                     const cleanSrcLine = srcLine.replace(/[^a-zA-Z0-9\\u0980-\\u09ff]+/g, '');
+                     const cleanSrcLine = srcLine.replace(/\\s+/g, '');
                      
                      if (cleanSrcLine.includes(cleanElText) || cleanElText.includes(cleanSrcLine)) {
                          el.setAttribute('data-line', i);
