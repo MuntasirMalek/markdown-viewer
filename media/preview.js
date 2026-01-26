@@ -54,33 +54,86 @@ function exportPdf() {
 }
 
 // ============================================
-// SYNC LOGIC: Smooth Center & Strict Locking
+// ANIMATION ENGINE: Physics-based, Interruptible
 // ============================================
 
-let isSyncing = false; // "Echo Prevention" Lock
-let lastScrollTime = 0;
-let unlockTimeout;
+let userInteracting = false;
+let animationFrameId = null;
+
+// Detecting User Interaction to kill auto-scroll
+const killScroll = () => {
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+    userInteracting = true;
+    setTimeout(() => { userInteracting = false; }, 200); // Debounce interaction flag
+};
+
+window.addEventListener('mousedown', killScroll);
+window.addEventListener('wheel', killScroll, { passive: true });
+window.addEventListener('touchstart', killScroll, { passive: true });
+window.addEventListener('keydown', killScroll);
+
+// Smooth Scroll Function (Custom Easing)
+function smoothScrollTo(targetY) {
+    if (userInteracting) return;
+
+    const startY = window.scrollY;
+    const distance = targetY - startY;
+    const startTime = performance.now();
+    const duration = 400; // ms
+
+    // Quadratic Ease-out
+    const easeOutQuad = (t) => t * (2 - t);
+
+    // Cancel previous
+    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+
+    function step(currentTime) {
+        if (userInteracting) return; // Kill switch
+
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = easeOutQuad(progress);
+
+        window.scrollTo(0, startY + (distance * ease));
+
+        if (progress < 1) {
+            animationFrameId = requestAnimationFrame(step);
+        } else {
+            animationFrameId = null;
+        }
+    }
+
+    animationFrameId = requestAnimationFrame(step);
+}
+
+// ============================================
+// SYNC LOGIC
+// ============================================
+
+let lastSyncSend = 0;
 
 // 1. Preview -> Editor (User Scrolled Preview)
 const scrollHandler = () => {
-    // If we are currently animating from an editor scroll, DO NOT send a sync back.
-    if (isSyncing) return;
+    // If we are auto-scrolling, DO NOT sync back to editor (prevents echo)
+    if (animationFrameId !== null) return;
 
     const now = Date.now();
-    // Debounce at 100ms: Wait for scroll to settle slightly
-    if (now - lastScrollTime < 100) return;
-    lastScrollTime = now;
+    if (now - lastSyncSend < 50) return; // Throttle 20fps
+    lastSyncSend = now;
 
     const elements = document.querySelectorAll('[data-line]');
     if (elements.length === 0) return;
 
-    // Center-biased detection
+    // Use absolute center
     const centerY = window.scrollY + (window.innerHeight / 2);
     let bestLine = -1;
     let minDist = Infinity;
 
     for (const el of elements) {
-        const rect = el.getBoundingClientRect(); // relative to viewport
+        const rect = el.getBoundingClientRect();
         const absTop = window.scrollY + rect.top;
         const dist = Math.abs(absTop - centerY);
 
@@ -107,21 +160,16 @@ window.addEventListener('message', event => {
         const line = message.line;
         const totalLines = message.totalLines;
 
-        // LOCK: Prevent preview from sending this scroll back to editor
-        isSyncing = true;
-        if (unlockTimeout) clearTimeout(unlockTimeout);
+        // Calculate Target Y
+        let targetY = 0;
 
-        // Unlock after animation finishes (750ms is enough for 'smooth')
-        unlockTimeout = setTimeout(() => { isSyncing = false; }, 750);
-
-        // Find Exact Element
+        // Exact Match
         const exactEl = document.querySelector(`[data-line="${line}"]`);
-
         if (exactEl) {
-            // Smooth scroll to CENTER
-            exactEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Center Align
+            targetY = exactEl.offsetTop - (window.innerHeight / 2) + (exactEl.clientHeight / 2);
         } else {
-            // Fallback: Interpolation
+            // Interpolation
             const elements = Array.from(document.querySelectorAll('[data-line]'));
             if (elements.length > 0) {
                 const sorted = elements.map(el => ({
@@ -137,27 +185,27 @@ window.addEventListener('message', event => {
                     else { after = item; break; }
                 }
 
-                let targetY = 0;
+                let rawY = 0;
                 if (before && after) {
                     const ratio = (line - before.line) / (after.line - before.line);
-                    targetY = before.top + (after.top - before.top) * ratio;
+                    rawY = before.top + (after.top - before.top) * ratio;
                 } else if (before) {
-                    targetY = before.top;
+                    rawY = before.top;
                 } else if (after) {
-                    targetY = 0;
+                    rawY = 0;
                 }
-
-                // Center logic for manual Y
-                const centerY = targetY - (window.innerHeight / 2);
-                const safeY = Math.max(0, centerY);
-
-                window.scrollTo({ top: safeY, behavior: 'smooth' });
+                targetY = rawY - (window.innerHeight / 2); // Center
             } else if (totalLines) {
                 // Percentage
                 const pct = line / totalLines;
-                const targetY = pct * document.body.scrollHeight;
-                window.scrollTo({ top: targetY, behavior: 'smooth' });
+                targetY = pct * document.body.scrollHeight;
             }
         }
+
+        // Bounds Check
+        targetY = Math.max(0, Math.min(targetY, document.body.scrollHeight - window.innerHeight));
+
+        // EXECUTE CUSTOM SCROLL
+        smoothScrollTo(targetY);
     }
 });

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.34] - 2024-01-26
+
+### Fixed
+- **Sync Physics**: Replaced the native smooth scroll with a high-performance **Custom Animation Engine**. Ideally, this mimics the "physics" of a real scroll wheel but controlled by the extension.
+- **Interruptible Sync**: The auto-scroll is now "polite". If you touch the mouse/trackpad or scroll manually while it's syncing, it **instantly stops** syncing to let you take control. This fixes the "fighting" sensation completely.
+- **Blank Prevention**: Added strict bounds checking to ensure we never try to scroll past the document limits (which causes white flashes).
+
 ## [1.0.33] - 2024-01-26
 
 ### Fixed
