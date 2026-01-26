@@ -161,6 +161,19 @@ export class PreviewPanel {
         .toolbar-btn { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 4px 12px; border-radius: 2px; cursor: pointer; font-size: 12px; }
         .toolbar-btn:hover { background: var(--vscode-button-hoverBackground); }
         .katex-display { overflow-x: auto; overflow-y: hidden; }
+        
+        /* Auto-Alert Styles for ⚠️ */
+        .emoji-alert-warning {
+            display: inline-block;
+            background-color: #fff8c5;
+            color: #24292f;
+            border-left: 3px solid #e3b341;
+            padding: 4px 8px;
+            border-radius: 2px;
+            margin: 4px 0;
+            font-style: normal !important;
+        }
+        .emoji-alert-warning em { font-style: italic; }
     </style>
 </head>
 <body>
@@ -177,26 +190,25 @@ export class PreviewPanel {
     <script id="markdown-content" type="text/plain">${escapedContent}</script>
     <script src="${scriptUri}"></script>
     <script>
-        // Configure marked to handle alerts and math
         const renderer = new marked.Renderer();
         renderer.text = function(token) {
             let text = token.text || token;
             if (typeof text === 'string') {
                 text = text.replace(/==([^=]+)==/g, '<mark>$1</mark>');
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
+                if (text.includes('⚠️')) {
+                     text = text.replace(/(^|\\s)⚠️\\s*([^<\\n]+)/g, '$1<span class="emoji-alert-warning">⚠️ $2</span>');
+                }
             }
             return text;
         };
-        // GitHub Alerts support
+        
         renderer.blockquote = function(quote) {
-            // Check for [!TYPE] pattern at start of blockquote content (marked returns inner HTML)
-            // The inner HTML usually starts with <p>
-            const match = quote.match(/^<p>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i);
+            const match = quote.match(/^<p>\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\]\\s*/i);
             if (match) {
                 const type = match[1].toLowerCase();
                 const title = type.charAt(0).toUpperCase() + type.slice(1);
-                // Remove the marker
-                const content = quote.replace(/^<p>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i, '<p>');
+                const content = quote.replace(/^<p>\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\]\\s*/i, '<p>');
                 return \`<div class="markdown-alert markdown-alert-\${type}"><p class="markdown-alert-title">\${title}</p>\${content}</div>\`;
             }
             return \`<blockquote>\${quote}</blockquote>\`;
@@ -214,7 +226,6 @@ export class PreviewPanel {
             }
         });
 
-        // Main rendering function (must match pdfExport.ts)
         function renderMarkdown(text) {
             const mathBlocks = []; 
             const inlineMath = [];
