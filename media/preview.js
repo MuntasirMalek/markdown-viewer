@@ -54,95 +54,35 @@ function exportPdf() {
 }
 
 // ============================================
-// ANIMATION ENGINE: Robust Lerp Loop
+// ANIMATION STRIPPED: Native Sync Only
 // ============================================
 
-let animationFrameId = null;
-let targetScrollY = window.scrollY;
-let isAutoScrolling = false;
-let safetyTimeout = null;
-
-// Kill Switch
-const killScroll = () => {
-    if (isAutoScrolling) {
-        isAutoScrolling = false;
-        targetScrollY = window.scrollY;
-        if (animationFrameId) {
-            cancelAnimationFrame(animationFrameId);
-            animationFrameId = null;
-        }
-        if (safetyTimeout) clearTimeout(safetyTimeout);
-        // Remove indicator
-        document.body.classList.remove('is-syncing');
-    }
-};
-
-const userAction = (e) => {
-    // Only kill if it's a real user event, not synthetic
-    if (e.isTrusted) killScroll();
-};
-
-window.addEventListener('mousedown', userAction);
-window.addEventListener('wheel', userAction, { passive: true });
-window.addEventListener('touchstart', userAction, { passive: true });
-window.addEventListener('keydown', userAction);
-
-function startScrollLoop() {
-    if (animationFrameId) return;
-
-    // Visual Indicator (Tiny blue bar at top)
+// Toggle Red Flash for debugging
+function flashDebug() {
+    document.body.style.backgroundColor = '#ffcccc'; // Light Red
+    setTimeout(() => {
+        document.body.style.backgroundColor = '';
+    }, 100);
+    // Also blue bar
     document.body.classList.add('is-syncing');
-
-    // Safety: Kill auto-scroll after 3 seconds max (prevents stuck lock)
-    if (safetyTimeout) clearTimeout(safetyTimeout);
-    safetyTimeout = setTimeout(() => { killScroll(); }, 3000);
-
-    function loop() {
-        if (!isAutoScrolling) {
-            animationFrameId = null;
-            document.body.classList.remove('is-syncing');
-            return;
-        }
-
-        const currentY = window.scrollY;
-
-        // Validation
-        if (isNaN(targetScrollY) || isNaN(currentY)) {
-            killScroll();
-            return;
-        }
-
-        const diff = targetScrollY - currentY;
-
-        // Stop if close enough
-        if (Math.abs(diff) < 1.0) {
-            window.scrollTo({ top: targetScrollY, behavior: 'auto' });
-            isAutoScrolling = false;
-            animationFrameId = null;
-            document.body.classList.remove('is-syncing');
-            return;
-        }
-
-        // Lerp factor 0.2
-        const nextY = currentY + (diff * 0.2);
-        window.scrollTo({ top: nextY, behavior: 'auto' });
-
-        animationFrameId = requestAnimationFrame(loop);
-    }
-
-    isAutoScrolling = true;
-    loop();
+    setTimeout(() => {
+        document.body.classList.remove('is-syncing');
+    }, 200);
 }
-
 
 // ============================================
 // SYNC LOGIC
 // ============================================
 
 let lastSyncSend = 0;
+let ignoreNextScroll = false; // crude lock
 
 const scrollHandler = (e) => {
-    if (isAutoScrolling) return;
+    // If we just sync-scrolled, ignore this event to prevent echo
+    if (ignoreNextScroll) {
+        ignoreNextScroll = false;
+        return;
+    }
 
     const now = Date.now();
     if (now - lastSyncSend < 50) return;
@@ -179,16 +119,16 @@ window.addEventListener('scroll', scrollHandler, { capture: true });
 window.addEventListener('message', event => {
     const message = event.data;
     if (message.type === 'scrollTo') {
-        // VISUAL DEBUG: Flash body slightly to prove receipt
-        // document.body.style.opacity = '0.99'; 
-        // setTimeout(() => document.body.style.opacity = '1', 50);
+
+        // DEBUG FLASH
+        flashDebug();
 
         const line = message.line;
         const totalLines = message.totalLines;
 
         let newTargetY = 0;
 
-        // Try exact match
+        // Exact match
         const exactEl = document.querySelector(`[data-line="${line}"]`);
         if (exactEl) {
             newTargetY = exactEl.offsetTop - (window.innerHeight / 2) + (exactEl.clientHeight / 2);
@@ -230,11 +170,12 @@ window.addEventListener('message', event => {
         const maxScroll = Math.max(0, document.body.scrollHeight - window.innerHeight);
         newTargetY = Math.max(0, Math.min(newTargetY, maxScroll));
 
-        if (Math.abs(newTargetY - targetScrollY) > 2 || !isAutoScrolling) {
-            targetScrollY = newTargetY;
-            if (!isAutoScrolling) {
-                startScrollLoop();
-            }
-        }
+        // NATIVE SCROLL (INSTANT)
+        // Set lock to prevent echo
+        ignoreNextScroll = true;
+        window.scrollTo({
+            top: newTargetY,
+            behavior: 'auto' // Instant jump
+        });
     }
 });
