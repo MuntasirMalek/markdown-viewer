@@ -238,21 +238,26 @@ export class PreviewPanel {
             const message = event.data;
             if (message.type === 'scrollTo') {
                 const line = message.line;
-                const newTargetY = calculateTargetY(line, message.totalLines);
+                const totalLines = message.totalLines;
+                const newTargetY = calculateTargetY(line, totalLines);
+                
                 if (!isNaN(newTargetY)) {
                     ignoreSyncUntil = Date.now() + 500;
                     window.scrollTo({ top: newTargetY, behavior: 'auto' });
                 }
             } else if (message.type === 'applyFormat') {
-                // handle format logic
+                // handle format
             }
         });
 
         function calculateTargetY(line, totalLines) {
+            // 1. Try EXACT Matching
             const exactEl = document.querySelector(\`[data-line="\${line}"]\`);
             if (exactEl) {
                  return exactEl.offsetTop - (window.innerHeight / 2) + (exactEl.clientHeight / 2);
             }
+            
+            // 2. Try INTERPOLATION Matching
             const elements = Array.from(document.querySelectorAll('[data-line]'));
             if (elements.length > 0) {
                  const sorted = elements.map(el => ({
@@ -269,9 +274,20 @@ export class PreviewPanel {
                       return before.top + (after.top - before.top) * ratio - (window.innerHeight / 2);
                  } else if (before) return before.top - (window.innerHeight / 2);
                  else if (after) return 0;
-            } else if (totalLines) {
-                 return (line / totalLines) * document.body.scrollHeight;
+            } 
+            
+            // 3. PERCENTAGE FALLBACK (CRITICAL FIX)
+            // If text matching failed, just use pure math.
+            if (totalLines > 0) {
+                 const percentage = line / totalLines;
+                 const scrollHeight = document.body.scrollHeight;
+                 // Add logic to clamp
+                 if (scrollHeight > window.innerHeight) {
+                    return percentage * (scrollHeight - window.innerHeight);
+                 }
+                 return 0;
             }
+            
             return 0;
         }
         
@@ -389,6 +405,7 @@ export class PreviewPanel {
                      const srcLine = sourceLines[i];
                      const cleanSrcLine = srcLine.replace(/\\s+/g, '');
                      
+                     // RELAXED MATCHING (Includes)
                      if (cleanSrcLine.includes(cleanElText) || cleanElText.includes(cleanSrcLine)) {
                          el.setAttribute('data-line', i);
                          usedLines.add(i);
