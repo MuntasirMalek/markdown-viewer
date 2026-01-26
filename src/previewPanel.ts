@@ -227,12 +227,6 @@ export class PreviewPanel {
                     bestLine = parseInt(el.getAttribute('data-line'));
                 }
             }
-            
-            // PROXIMITY CHECK (Right Side Jump Fix)
-            // If the nearest line is > 100px away from center, ignore it.
-            // This prevents jumping to sections far away when scrolling empty gaps.
-            if (minDist > 100) return;
-
             if (bestLine >= 0) {
                 vscode.postMessage({ type: 'revealLine', line: bestLine });
             }
@@ -244,34 +238,39 @@ export class PreviewPanel {
             const message = event.data;
             if (message.type === 'scrollTo') {
                 const line = message.line;
-                const totalLines = message.totalLines;
-                const newTargetY = calculateTargetY(line, totalLines);
-                
+                const newTargetY = calculateTargetY(line, message.totalLines);
                 if (!isNaN(newTargetY)) {
-                    ignoreSyncUntil = Date.now() + 500; 
+                    ignoreSyncUntil = Date.now() + 500;
                     window.scrollTo({ top: newTargetY, behavior: 'auto' });
                 }
             } else if (message.type === 'applyFormat') {
-                // handle format
+                // handle format logic
             }
         });
 
         function calculateTargetY(line, totalLines) {
-            const documentHeight = document.body.scrollHeight;
-            const windowHeight = window.innerHeight;
-
-            // STRATEGY: PURE PERCENTAGE (Consistency Rule)
-            // The "Smart Matching" is failing for complex content.
-            // We will trust the Percentage math 100% of the time.
-            
-            if (totalLines > 0) {
-                let percentage = line / totalLines;
-                // Clamp it
-                if (percentage < 0) percentage = 0;
-                if (percentage > 1) percentage = 1;
-                
-                const targetY = percentage * (documentHeight - windowHeight);
-                return targetY;
+            const exactEl = document.querySelector(\`[data-line="\${line}"]\`);
+            if (exactEl) {
+                 return exactEl.offsetTop - (window.innerHeight / 2) + (exactEl.clientHeight / 2);
+            }
+            const elements = Array.from(document.querySelectorAll('[data-line]'));
+            if (elements.length > 0) {
+                 const sorted = elements.map(el => ({
+                     line: parseInt(el.getAttribute('data-line')),
+                     top: el.offsetTop
+                 })).sort((a, b) => a.line - b.line);
+                 let before = null, after = null;
+                 for (const item of sorted) {
+                     if (item.line <= line) before = item;
+                     else { after = item; break; }
+                 }
+                 if (before && after) {
+                      const ratio = (line - before.line) / (after.line - before.line);
+                      return before.top + (after.top - before.top) * ratio - (window.innerHeight / 2);
+                 } else if (before) return before.top - (window.innerHeight / 2);
+                 else if (after) return 0;
+            } else if (totalLines) {
+                 return (line / totalLines) * document.body.scrollHeight;
             }
             return 0;
         }
@@ -383,7 +382,7 @@ export class PreviewPanel {
             blockElements.forEach(el => {
                 const elText = el.textContent.trim();
                 const cleanElText = elText.replace(/\\s+/g, '');
-                if (cleanElText.length === 0) return;
+                if (cleanElText.length < 2) return;
 
                 for (let i = 0; i < sourceLines.length; i++) {
                      if (usedLines.has(i)) continue;

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.55] - 2024-01-26
+
+### Fixed
+- **REVERTED to v1.0.51**: As requested, I have reverted all "smart" logic (Percentage Fallback, Hybrid Scroll, Proximity Checks). 
+- **State**: This version is a bit-for-bit copy of v1.0.51 logic. It has Nuclear Sync (Left) and Timestamp Gate (Right).
+
 ## [1.0.54] - 2024-01-26
 
 ### Fixed
