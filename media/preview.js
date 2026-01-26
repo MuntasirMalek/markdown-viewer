@@ -23,15 +23,8 @@ let selectedText = '';
 function configureMarked() {
     const renderer = new marked.Renderer();
 
-    // Override text to support ==highlight== (yellow) and ::text:: (red)
-    renderer.text = function (token) {
-        let text = token.text || token;
-        if (typeof text === 'string') {
-            text = text.replace(/==([^=]+)==/g, '<mark>$1</mark>');
-            text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
-        }
-        return text;
-    };
+    // Removed custom renderer.text override for ==highlight== to avoid false positive yellow highlights.
+    // Standard text rendering only.
 
     marked.setOptions({
         renderer: renderer,

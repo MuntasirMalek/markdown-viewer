@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.13] - 2024-01-26
+
+### Fixed
+- **Style Match**: Removed default table background colors and "zebra striping" to match the cleaner, plain-text styling of the reference extension.
+- **Cleanup**: Diabled custom `==highlight==` syntax to prevent any accidental yellow text highlighting that was not present in the original markdown.
+
+## [1.0.12] - 2024-01-26
+
+### Fixed
+- **Visual Match**: "Auto-Alert" now visually replaces the `⚠️` emoji with a bold `!` icon inside the warning box, matching the reference rendering exactly. The underlying markdown remains unchanged.
+
 ## [1.0.11] - 2024-01-26
 
 ### Fixed

@@ -10,9 +10,9 @@
     --code-bg: #f6f8fa;
     --code-border: #d0d7de;
 
-    /* Table colors */
-    --table-header-bg: #f6f8fa;
-    --table-row-alt: #f6f8fa;
+    /* Table colors - MPE Plain Style (Transparent) */
+    --table-header-bg: transparent;
+    --table-row-alt: transparent;
     --table-border: #d0d7de;
 
     /* Blockquote */
@@ -186,7 +186,7 @@ li > ol {
     margin-bottom: 0;
 }
 
-/* ===== Tables ===== */
+/* ===== Tables - Plain Style ===== */
 table {
     border-collapse: collapse;
     width: 100%;
@@ -207,7 +207,7 @@ th {
 }
 
 tr:nth-child(even) {
-    background: var(--table-row-alt);
+    background: var(--table-row-alt); /* Default matches var which is now transparent */
 }
 
 /* ===== Horizontal Rules ===== */
@@ -326,8 +326,9 @@ mark.red-highlight {
         --preview-border: #3c3c3c;
         --code-bg: #2d2d30;
         --code-border: #3c3c3c;
-        --table-header-bg: #2d2d30;
-        --table-row-alt: #252526;
+        /* Plain Table Dark */
+        --table-header-bg: transparent;
+        --table-row-alt: transparent;
         --table-border: #3c3c3c;
         --blockquote-border: #3c3c3c;
         --blockquote-bg: #252526;
@@ -343,8 +344,9 @@ body.vscode-dark {
     --preview-border: #3c3c3c;
     --code-bg: #2d2d30;
     --code-border: #3c3c3c;
-    --table-header-bg: #2d2d30;
-    --table-row-alt: #252526;
+    /* Plain Table Dark */
+    --table-header-bg: transparent;
+    --table-row-alt: transparent;
     --table-border: #3c3c3c;
     --blockquote-border: #3c3c3c;
     --blockquote-bg: #252526;

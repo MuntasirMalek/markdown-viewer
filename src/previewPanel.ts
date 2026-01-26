@@ -164,17 +164,22 @@ export class PreviewPanel {
         
         /* Magic Auto-Alert: Exact MPE Style Imitation */
         .emoji-warning {
-            display: inline-block; /* Magic Bullet: behaves like block but valid inline */
-            width: 95%; /* Make it span almost full width */
+            display: inline-block;
+            width: 95%; 
             background-color: #fff5b1;
             color: #24292e;
             padding: 8px 12px;
             border-left: 4px solid #e3b341;
             border-radius: 0 2px 2px 0;
             margin: 4px 0;
-            white-space: normal; /* Allow text wrapping */
+            white-space: normal;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
         }
-        /* Restore italics if they were stripped or nested */
+        .emoji-warning-icon {
+            font-weight: bold;
+            margin-right: 6px;
+            color: #856404; /* Darker yellow/brown for icon */
+        }
         .emoji-warning em { font-style: normal; font-weight: 500; }
     </style>
 </head>
@@ -196,13 +201,15 @@ export class PreviewPanel {
         renderer.text = function(token) {
             let text = token.text || token;
             if (typeof text === 'string') {
-                text = text.replace(/==([^=]+)==/g, '<mark>$1</mark>');
+                // Also remove ==highlight== support here since we removed it from preview.js
+                // text = text.replace(/==([^=]+)==/g, '<mark>$1</mark>'); 
+                // We keep it commented in case user wants it back via setting later
+                
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
                 
-                // MPE-style Auto-Alert with inline-block
+                // MPE-style Auto-Alert: Replace ⚠️ with ! and style
                 if (text.includes('⚠️')) {
-                     // Regex to capture line content starting with ⚠️
-                     text = text.replace(/(⚠️\s*[^<\\n]+)/g, '<span class="emoji-warning">$1</span>');
+                     text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning"><span class="emoji-warning-icon">!</span>$2</span>');
                 }
             }
             return text;
