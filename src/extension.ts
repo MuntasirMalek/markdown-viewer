@@ -6,7 +6,7 @@ import { exportToPdf } from './pdfExport';
 export function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
     context.subscriptions.push(outputChannel);
-    outputChannel.appendLine('Extension Activation Started (v1.0.47).');
+    outputChannel.appendLine('Extension Activation Started (v1.0.48 - THROTTLED).');
 
     // Status Bar Item for Sync Health
     const syncStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -53,22 +53,28 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
+    // SCROLL THROTTLING
+    let lastScrollTime = 0;
+
     const scrollListener = vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
         if (event.textEditor.document.languageId === 'markdown') {
-            // NUCLEAR OPTION 2.0: NO VALIDATION (Removed all checks)
-            // If a markdown file scrolls, we sync it. 
-            // Logic: The "Reload Fix" in v1.0.45 protects us from scroll resets.
+
+            // THROTTLE: 50ms Limit
+            // This prevents flooding the WebView with hundreds of messages per second on fast scroll,
+            // which was likely causing the "Not Responding" freeze and the broken/laggy sync.
+            const now = Date.now();
+            if (now - lastScrollTime < 50) {
+                return;
+            }
+            lastScrollTime = now;
 
             const visibleRange = event.visibleRanges[0];
             if (visibleRange) {
                 PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
-                syncStatusItem.text = `$(check) MD Sync: Active (Nuclear)`;
-                syncStatusItem.show();
 
-                // Reset status for feedback
-                setTimeout(() => {
-                    syncStatusItem.text = `$(check) MD Sync: Ready`;
-                }, 500);
+                // Only update StatusBar occasionally to avoid UI flicker/load
+                // We don't need to show 'Active' every 50ms.
+                // Just let it be.
             }
         }
     });

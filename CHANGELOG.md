@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.48] - 2024-01-26
+
+### Fixed
+- **Freeze/Crash Fix (Throttling)**: I identified that the extension was spamming the preview window with hundreds of messages per second during fast scrolling. This caused the "Not Responding" freezes. I added a "Speed Limit" (Throttle) so it only updates the preview 20 times a second, which is smooth but safe.
+- **Responsiveness**: This should make the preview feel much lighter and refrain from crashing your VS Code window.
+
 ## [1.0.47] - 2024-01-26
 
 ### Fixed
