@@ -12,23 +12,14 @@ try {
     console.error('puppeteer-core not available:', e);
 }
 
-/**
- * Find Chrome/Chromium executable path
- */
 function findChromePath(): string | undefined {
     const config = vscode.workspace.getConfiguration('markdownViewer');
     const configuredPath = config.get<string>('chromePath');
+    if (configuredPath && fs.existsSync(configuredPath)) return configuredPath;
 
-    if (configuredPath && fs.existsSync(configuredPath)) {
-        return configuredPath;
-    }
-
-    // Common Chrome/Chromium paths
     const platform = os.platform();
     const possiblePaths: string[] = [];
-
     if (platform === 'darwin') {
-        // macOS
         possiblePaths.push(
             '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
             '/Applications/Chromium.app/Contents/MacOS/Chromium',
@@ -36,11 +27,9 @@ function findChromePath(): string | undefined {
             `${os.homedir()}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
         );
     } else if (platform === 'win32') {
-        // Windows
         const programFiles = process.env['PROGRAMFILES'] || 'C:\\Program Files';
         const programFilesX86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
         const localAppData = process.env['LOCALAPPDATA'] || '';
-
         possiblePaths.push(
             `${programFiles}\\Google\\Chrome\\Application\\chrome.exe`,
             `${programFilesX86}\\Google\\Chrome\\Application\\chrome.exe`,
@@ -48,34 +37,18 @@ function findChromePath(): string | undefined {
             `${programFiles}\\Microsoft\\Edge\\Application\\msedge.exe`
         );
     } else {
-        // Linux
-        possiblePaths.push(
-            '/usr/bin/google-chrome',
-            '/usr/bin/google-chrome-stable',
-            '/usr/bin/chromium',
-            '/usr/bin/chromium-browser',
-            '/snap/bin/chromium'
-        );
+        possiblePaths.push('/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser');
     }
 
-    for (const chromePath of possiblePaths) {
-        if (fs.existsSync(chromePath)) {
-            return chromePath;
-        }
+    for (const p of possiblePaths) {
+        if (fs.existsSync(p)) return p;
     }
-
     return undefined;
 }
 
-/**
- * Generate HTML content for PDF export
- */
 function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): string {
     const vendorPath = path.join(extensionUri.fsPath, 'media', 'vendor');
-
-    // Convert to file URIs for Puppeteer
     const toFileUri = (p: string) => vscode.Uri.file(p).toString();
-
     const katexCss = toFileUri(path.join(vendorPath, 'katex', 'katex.min.css'));
     const katexJs = toFileUri(path.join(vendorPath, 'katex', 'katex.min.js'));
     const highlightCss = toFileUri(path.join(vendorPath, 'github.min.css'));
@@ -89,52 +62,23 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Markdown Export</title>
-    
-    <!-- KaTeX -->
     <link rel="stylesheet" href="${katexCss}">
     <script src="${katexJs}"></script>
-    
-    <!-- Highlight.js -->
     <link rel="stylesheet" href="${highlightCss}">
     <script src="${highlightJs}"></script>
-    
-    <!-- Marked.js -->
     <script src="${markedJs}"></script>
-    
-    <!-- GitHub Markdown CSS -->
     <link rel="stylesheet" href="${githubCss}">
-    
     <style>
-        /* Base styles for PDF */
-        body {
-            background-color: white;
-        }
-
-        .markdown-body {
-            box-sizing: border-box;
-            min-width: 200px;
-            max-width: 980px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        @page {
-            size: A4;
-            margin: 20mm;
-        }
-
-        /* Fix for KaTeX in GitHub CSS */
+        body { background-color: white; }
+        .markdown-body { box-sizing: border-box; min-width: 200px; max-width: 980px; margin: 0 auto; padding: 20px; }
+        @page { size: A4; margin: 20mm; }
         .katex-display { overflow-x: auto; overflow-y: hidden; }
-        
-        /* Ensure syntax highlighting bg is correct */
         pre { background-color: #f6f8fa !important; }
     </style>
 </head>
 <body>
     <div class="markdown-body" id="content"></div>
-    
     <script>
-        // Configure marked
         const renderer = new marked.Renderer();
         renderer.text = function(token) {
             let text = token.text || token;
@@ -143,6 +87,17 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
             }
             return text;
         };
+        // GitHub Alerts support in PDF
+        renderer.blockquote = function(quote) {
+            const match = quote.match(/^<p>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i);
+            if (match) {
+                const type = match[1].toLowerCase();
+                const title = type.charAt(0).toUpperCase() + type.slice(1);
+                const content = quote.replace(/^<p>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i, '<p>');
+                return \`<div class="markdown-alert markdown-alert-\${type}"><p class="markdown-alert-title">\${title}</p>\${content}</div>\`;
+            }
+            return \`<blockquote>\${quote}</blockquote>\`;
+        };
 
         marked.setOptions({
             renderer: renderer,
@@ -150,9 +105,7 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
             breaks: true,
             highlight: function(code, lang) {
                 if (lang && hljs.getLanguage(lang)) {
-                    try {
-                        return hljs.highlight(code, { language: lang }).value;
-                    } catch (e) {}
+                    try { return hljs.highlight(code, { language: lang }).value; } catch (e) {}
                 }
                 return hljs.highlightAuto(code).value;
             }
@@ -161,165 +114,98 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
         function renderMarkdown(text) {
             const mathBlocks = [];
             const inlineMath = [];
-
-            // Extract display math
-            text = text.replace(/\$\$([^$]+)\$\$/g, (match, math) => {
-                mathBlocks.push(math);
-                return \`%%MATHBLOCK\${mathBlocks.length - 1}%%\`;
-            });
-
-            // Extract inline math
-            text = text.replace(/\\$([^$\\n]+)\\$/g, (match, math) => {
-                inlineMath.push(math);
-                return \`%%INLINEMATH\${inlineMath.length - 1}%%\`;
-            });
-
+            text = text.replace(/\\$\\$([^$]+)\\$\\$/g, (m, math) => { mathBlocks.push(math); return \`%%MATHBLOCK\${mathBlocks.length-1}%%\`; });
+            text = text.replace(/\\$([^$\\n]+)\\$/g, (m, math) => { inlineMath.push(math); return \`%%INLINEMATH\${inlineMath.length-1}%%\`; });
             let html = marked.parse(text);
-
-            // Restore math
-            html = html.replace(/%%MATHBLOCK(\\d+)%%/g, (match, index) => {
-                try {
-                    return katex.renderToString(mathBlocks[parseInt(index)], {
-                        displayMode: true,
-                        throwOnError: false
-                    });
-                } catch (e) {
-                    return match;
-                }
+            html = html.replace(/%%MATHBLOCK(\\d+)%%/g, (m, i) => {
+                try { return katex.renderToString(mathBlocks[parseInt(i)], { displayMode: true, throwOnError: false }); } catch(e) { return m; }
             });
-
-            html = html.replace(/%%INLINEMATH(\\d+)%%/g, (match, index) => {
-                try {
-                    return katex.renderToString(inlineMath[parseInt(index)], {
-                        displayMode: false,
-                        throwOnError: false
-                    });
-                } catch (e) {
-                    return match;
-                }
+            html = html.replace(/%%INLINEMATH(\\d+)%%/g, (m, i) => {
+                try { return katex.renderToString(inlineMath[parseInt(i)], { displayMode: false, throwOnError: false }); } catch(e) { return m; }
             });
-
             return html;
         }
 
-        const markdownContent = ${JSON.stringify(markdownContent)};
-        document.getElementById('content').innerHTML = renderMarkdown(markdownContent);
+        const raw = ${JSON.stringify(markdownContent)};
+        document.getElementById('content').innerHTML = renderMarkdown(raw);
     </script>
 </body>
 </html>`;
 }
 
-/**
- * Export markdown document to PDF
- */
 export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.TextDocument): Promise<void> {
+    const ext = vscode.extensions.getExtension('utsho.markdown-viewer-enhanced');
+    const outputChannel = ext?.exports?.outputChannel;
+
+    if (outputChannel) {
+        outputChannel.appendLine(`[${new Date().toISOString()}] Starting PDF export for ${document.fileName}`);
+    }
+
     if (!puppeteer) {
-        vscode.window.showErrorMessage(
-            'PDF export requires "puppeteer-core". Please ensure dependencies are installed.'
-        );
+        vscode.window.showErrorMessage('PDF export requires "puppeteer-core".');
         return;
     }
 
     const chromePath = findChromePath();
+    if (outputChannel && chromePath) outputChannel.appendLine(`Found Chrome at: ${chromePath}`);
+    if (outputChannel && !chromePath) outputChannel.appendLine('Chrome not found in standard paths.');
+
     if (!chromePath) {
-        const action = await vscode.window.showErrorMessage(
-            'Chrome/Chromium not found. PDF export requires Chrome, Chromium, or Edge to be installed.',
-            'Configure Path'
-        );
-        if (action === 'Configure Path') {
-            vscode.commands.executeCommand('workbench.action.openSettings', 'markdownViewer.chromePath');
-        }
+        vscode.window.showErrorMessage('Chrome/Chromium not found. Please set "markdownViewer.chromePath".');
         return;
     }
 
-    // Ask for save location
     const defaultFileName = path.basename(document.fileName, '.md') + '.pdf';
-    const defaultUri = vscode.Uri.file(
-        path.join(path.dirname(document.fileName), defaultFileName)
-    );
+    const defaultUri = vscode.Uri.file(path.join(path.dirname(document.fileName), defaultFileName));
+    const saveUri = await vscode.window.showSaveDialog({ defaultUri, filters: { 'PDF': ['pdf'] } });
+    if (!saveUri) return;
 
-    const saveUri = await vscode.window.showSaveDialog({
-        defaultUri: defaultUri,
-        filters: { 'PDF': ['pdf'] }
-    });
+    await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: 'Exporting to PDF...',
+        cancellable: false
+    }, async (progress) => {
+        try {
+            progress.report({ increment: 10, message: 'Launching browser...' });
 
-    if (!saveUri) {
-        return; // User cancelled
-    }
+            // Log env info
+            if (outputChannel) outputChannel.appendLine(`Launching puppeteer with executable: ${chromePath}`);
 
-    // Show progress
-    await vscode.window.withProgress(
-        {
-            location: vscode.ProgressLocation.Notification,
-            title: 'Exporting to PDF...',
-            cancellable: false
-        },
-        async (progress) => {
-            try {
-                progress.report({ increment: 10, message: 'Launching browser...' });
+            const browser = await puppeteer.launch({
+                headless: true,
+                executablePath: chromePath,
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu']
+            });
 
-                const browser = await puppeteer.launch({
-                    headless: true,
-                    executablePath: chromePath,
-                    args: ['--no-sandbox', '--disable-setuid-sandbox']
-                });
+            progress.report({ increment: 20, message: 'Rendering...' });
+            const page = await browser.newPage();
+            const htmlContent = generateHtmlForPdf(document.getText(), extensionUri);
 
-                progress.report({ increment: 20, message: 'Rendering content...' });
+            // Log HTML size
+            if (outputChannel) outputChannel.appendLine(`Generated HTML size: ${htmlContent.length} bytes`);
 
-                const page = await browser.newPage();
+            await page.setContent(htmlContent, { waitUntil: ['networkidle0', 'domcontentloaded'], timeout: 60000 });
+            await new Promise(resolve => setTimeout(resolve, 1500));
 
-                // Pass extensionUri to resolve local resources
-                const htmlContent = generateHtmlForPdf(document.getText(), extensionUri);
+            progress.report({ increment: 50, message: 'Generating PDF...' });
+            const config = vscode.workspace.getConfiguration('markdownViewer');
+            await page.pdf({
+                path: saveUri.fsPath,
+                format: (config.get<string>('pdfPageSize') || 'A4') as any,
+                margin: { top: '20mm', bottom: '20mm', left: '20mm', right: '20mm' },
+                printBackground: true
+            });
 
-                // Determine local path to serve as base for relative images
-                // But for styles we used absolute file URIs.
-                await page.setContent(htmlContent, {
-                    waitUntil: ['networkidle0', 'domcontentloaded'],
-                    timeout: 30000
-                });
+            await browser.close();
+            if (outputChannel) outputChannel.appendLine('Export success.');
 
-                // Wait a bit for fonts and math to render
-                await new Promise(resolve => setTimeout(resolve, 1500));
+            const openAction = await vscode.window.showInformationMessage(`PDF exported: ${path.basename(saveUri.fsPath)}`, 'Open');
+            if (openAction === 'Open') vscode.env.openExternal(saveUri);
 
-                progress.report({ increment: 50, message: 'Generating PDF...' });
-
-                const config = vscode.workspace.getConfiguration('markdownViewer');
-                const pageSize = config.get<string>('pdfPageSize') || 'A4';
-                const margin = config.get<string>('pdfMargin') || '20mm';
-
-                await page.pdf({
-                    path: saveUri.fsPath,
-                    format: pageSize as any,
-                    margin: {
-                        top: margin,
-                        bottom: margin,
-                        left: margin,
-                        right: margin
-                    },
-                    printBackground: true
-                });
-
-                progress.report({ increment: 100, message: 'Done!' });
-
-                await browser.close();
-
-                const openAction = await vscode.window.showInformationMessage(
-                    `PDF exported successfully: ${path.basename(saveUri.fsPath)}`,
-                    'Open File',
-                    'Open Folder'
-                );
-
-                if (openAction === 'Open File') {
-                    vscode.env.openExternal(saveUri);
-                } else if (openAction === 'Open Folder') {
-                    vscode.commands.executeCommand('revealFileInOS', saveUri);
-                }
-
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                vscode.window.showErrorMessage(`Failed to export PDF: ${errorMessage}`);
-                console.error('PDF export error:', error);
-            }
+        } catch (error: any) {
+            const msg = error.message || String(error);
+            if (outputChannel) outputChannel.appendLine(`ERROR: ${msg}\nStack: ${error.stack}`);
+            vscode.window.showErrorMessage(`Failed to export PDF: ${msg}. Check "Output > Markdown Viewer Enhanced" for details.`);
         }
-    );
+    });
 }

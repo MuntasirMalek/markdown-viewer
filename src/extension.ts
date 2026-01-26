@@ -61,7 +61,15 @@ export function activate(context: vscode.ExtensionContext) {
         documentChangeListener,
         editorChangeListener,
         scrollListener
+        // configurationChangeListener // Uncomment and define configurationChangeListener if needed
     );
+
+    // Create output channel
+    const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
+    context.subscriptions.push(outputChannel);
+
+    // Export the channel for other modules
+    return { outputChannel };
 }
 
 export function deactivate() {
