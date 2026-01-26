@@ -227,6 +227,12 @@ export class PreviewPanel {
                     bestLine = parseInt(el.getAttribute('data-line'));
                 }
             }
+            
+            // PROXIMITY CHECK (Right Side Jump Fix)
+            // If the nearest line is > 100px away from center, ignore it.
+            // This prevents jumping to sections far away when scrolling empty gaps.
+            if (minDist > 100) return;
+
             if (bestLine >= 0) {
                 vscode.postMessage({ type: 'revealLine', line: bestLine });
             }
@@ -242,7 +248,7 @@ export class PreviewPanel {
                 const newTargetY = calculateTargetY(line, totalLines);
                 
                 if (!isNaN(newTargetY)) {
-                    ignoreSyncUntil = Date.now() + 500; // Increased Lock time
+                    ignoreSyncUntil = Date.now() + 500; 
                     window.scrollTo({ top: newTargetY, behavior: 'auto' });
                 }
             } else if (message.type === 'applyFormat') {
@@ -254,63 +260,20 @@ export class PreviewPanel {
             const documentHeight = document.body.scrollHeight;
             const windowHeight = window.innerHeight;
 
-            // 1. Calculate Pure Percentage Target
-            let percentageTarget = 0;
+            // STRATEGY: PURE PERCENTAGE (Consistency Rule)
+            // The "Smart Matching" is failing for complex content.
+            // We will trust the Percentage math 100% of the time.
+            
             if (totalLines > 0) {
-                const percentage = line / totalLines;
-                percentageTarget = percentage * (documentHeight - windowHeight);
-                if (percentageTarget < 0) percentageTarget = 0;
+                let percentage = line / totalLines;
+                // Clamp it
+                if (percentage < 0) percentage = 0;
+                if (percentage > 1) percentage = 1;
+                
+                const targetY = percentage * (documentHeight - windowHeight);
+                return targetY;
             }
-
-            // 2. Try DATA-LINE Matching
-            const exactEl = document.querySelector(\`[data-line="\${line}"]\`);
-            let matchedTarget = -1;
-
-            if (exactEl) {
-                 matchedTarget = exactEl.offsetTop - (windowHeight / 2) + (exactEl.clientHeight / 2);
-            } else {
-                // Interpolation
-                const elements = Array.from(document.querySelectorAll('[data-line]'));
-                if (elements.length > 0) {
-                     const sorted = elements.map(el => ({
-                         line: parseInt(el.getAttribute('data-line')),
-                         top: el.offsetTop
-                     })).sort((a, b) => a.line - b.line);
-                     
-                     let before = null, after = null;
-                     for (const item of sorted) {
-                         if (item.line <= line) before = item;
-                         else { after = item; break; }
-                     }
-                     
-                     if (before && after) {
-                          // Check GAP size
-                          // If the gap is huge (e.g. > 50 lines), the interpolation might be way off (jumping sections)
-                          if ((after.line - before.line) < 50) {
-                              const ratio = (line - before.line) / (after.line - before.line);
-                              matchedTarget = before.top + (after.top - before.top) * ratio - (windowHeight / 2);
-                          }
-                     } else if (before) {
-                          if ((line - before.line) < 20) {
-                              matchedTarget = before.top - (windowHeight / 2);
-                          }
-                     }
-                }
-            }
-            
-            // 3. HYBRID DECISION
-            // If we have a good matched target, use it.
-            if (matchedTarget !== -1) {
-                // But if matched target is suspiciously far from percentage target (e.g. > 1 screen height),
-                // it might be a false positive (matching 'the' in a different section).
-                // Let's trust the match, BUT blend it if stats are weak. 
-                // Actually, for now, TRUST MATCH unless it's null.
-                return matchedTarget;
-            }
-            
-            // 4. FALLBACK TO PERCENTAGE
-            // If data-line failed or gap was too big, use percentage.
-            return percentageTarget;
+            return 0;
         }
         
         // Toolbar Logic
@@ -416,12 +379,10 @@ export class PreviewPanel {
         function _inlineAddLineAttributes(sourceLines) {
             const preview = document.getElementById('preview');
             const usedLines = new Set();
-            // Expanded query selector to include spans (some inline elements might wrap)
             const blockElements = preview.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote > p, pre, .katex-display, table, .emoji-warning');
             blockElements.forEach(el => {
                 const elText = el.textContent.trim();
                 const cleanElText = elText.replace(/\\s+/g, '');
-                // Removed length check to support short bullets
                 if (cleanElText.length === 0) return;
 
                 for (let i = 0; i < sourceLines.length; i++) {
