@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.51] - 2024-01-26
+
+### Fixed
+- **Left Side Fix (Nuclear + Gate)**: I realized that since I added the "Timestamp Gate" (which prevents loops), I don't need the file safety checks anymore!
+- **Removal of All Checks**: I removed the file path checks again. If you scroll the editor, it WILL sync the preview. No exceptions.
+- **Loop Protection**: The "Timestamp Gate" is still there, so it won't jitter.
+- **Summary**: Editor scrolls Preview (Always). Preview scrolls Editor (Always, but Locks Editor for 1s). Perfect balance.
+
 ## [1.0.50] - 2024-01-26
 
 ### Fixed

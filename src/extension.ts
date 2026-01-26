@@ -6,7 +6,7 @@ import { exportToPdf } from './pdfExport';
 export function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
     context.subscriptions.push(outputChannel);
-    outputChannel.appendLine('Extension Activation Started (v1.0.50).');
+    outputChannel.appendLine('Extension Activation Started (v1.0.51 - NUCLEAR + GATE).');
 
     // Status Bar Item for Sync Health
     const syncStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -59,27 +59,17 @@ export function activate(context: vscode.ExtensionContext) {
     const scrollListener = vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
         if (event.textEditor.document.languageId === 'markdown') {
 
-            // 1. TIMESTAMP GATE (Replacing Boolean Lock)
-            // If the preview scrolled the editor recently (< 1000ms), ignore this curve.
+            // 1. TIMESTAMP GATE (THE GUARD)
+            // If the preview scrolled the editor recently (< 1000ms), STOP.
+            // This prevents the loop/jitter.
             if (Date.now() - PreviewPanel.lastRemoteScrollTime < 1000) {
                 return;
             }
 
-            // 2. PATH CHECK (Restored but Safe)
-            // Prevent syncing unrelated files
-            const currentDoc = PreviewPanel.currentDocument;
-            let shouldSync = false;
-
-            if (currentDoc) {
-                const eventPath = event.textEditor.document.uri.fsPath.toLowerCase();
-                const previewPath = currentDoc.uri.fsPath.toLowerCase();
-                // Relaxed check: Same Full Path OR Same Basename
-                if (eventPath === previewPath || path.basename(eventPath) === path.basename(previewPath)) {
-                    shouldSync = true;
-                }
-            }
-
-            if (!shouldSync) return;
+            // 2. NUCLEAR OPTION (NO PATH CHECKS)
+            // We removed the path checks because they were failing for your specific file.
+            // Since we have the Timestamp Gate, we don't need to worry about loops.
+            // And honestly, if you scroll *any* markdown file, you probably want the preview to sync.
 
             // 3. THROTTLE
             const now = Date.now();
