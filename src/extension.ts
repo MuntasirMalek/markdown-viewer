@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { PreviewPanel } from './previewPanel';
 import { exportToPdf } from './pdfExport';
 
 export function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
     context.subscriptions.push(outputChannel);
-    outputChannel.appendLine('Extension Activation Started (v1.0.40).');
+    outputChannel.appendLine('Extension Activation Started (v1.0.41).');
 
     const openPreview = () => {
         const editor = vscode.window.activeTextEditor;
@@ -47,29 +48,27 @@ export function activate(context: vscode.ExtensionContext) {
         if (event.textEditor.document.languageId === 'markdown') {
             const currentDoc = PreviewPanel.currentDocument;
 
-            // Normalized Paths (Fix for macOS case-insensitivity)
+            // Normalized Paths
             const eventPath = event.textEditor.document.uri.fsPath.toLowerCase();
             const previewPath = currentDoc ? currentDoc.uri.fsPath.toLowerCase() : 'none';
 
-            // Uncommenting logs to debug "Dead Sync"
-            // Using terse format to avoid flooding too much, but enough to verify
-            /*
-            outputChannel.appendLine(`[Scroll] Event: ${path.basename(eventPath)} | Preview: ${path.basename(previewPath)}`);
-            */
+            // VERBOSE LOGGING ENABLED FOR DIAGNOSIS
+            // This will print every scroll event.
+            const isMatch = (eventPath === previewPath);
 
-            // If we want to truly debug this for the user, we should enable ONE log line per event if they don't match?
-            // No, that would spam if they have two split editors.
-            // Let's rely on the fix (toLowerCase) first. 
-            // But I will enable a 'Syncing' log if it matches, so we know it SUCCEEDED.
+            // Log the comparison to catch the "Dead Sync" culprit
+            outputChannel.appendLine(`[Scroll Check] Match=${isMatch}`);
+            outputChannel.appendLine(`   Event:   ${event.textEditor.document.fileName}`);
+            outputChannel.appendLine(`   Preview: ${currentDoc ? currentDoc.fileName : 'None'}`);
 
-            if (currentDoc && eventPath === previewPath) {
+            if (currentDoc && isMatch) {
                 const visibleRange = event.visibleRanges[0];
                 if (visibleRange) {
-                    // outputChannel.appendLine(`[Sync] Triggered for Line: ${visibleRange.start.line}`);
+                    outputChannel.appendLine(`   >> SYNCING line ${visibleRange.start.line}`);
                     PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
                 }
             } else {
-                // outputChannel.appendLine(`[Sync] Skipped. Mismatch.`);
+                outputChannel.appendLine(`   >> SKIPPED (Mismatch or No Preview)`);
             }
         }
     });
