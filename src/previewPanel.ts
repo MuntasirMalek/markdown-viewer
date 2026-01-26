@@ -162,14 +162,14 @@ export class PreviewPanel {
         .toolbar-btn:hover { background: var(--vscode-button-hoverBackground); }
         .katex-display { overflow-x: auto; overflow-y: hidden; }
         
-        /* MPE-style Auto-Alert */
+        /* MPE-style: Solid Gray Blocks via Shared Texture */
         .emoji-warning {
             display: inline-block;
             width: 95%; 
-            background-color: #fff5b1; /* Restore Pale Yellow */
+            background-color: #f1f1f1; /* Solid Gray */
             color: #24292e;
             padding: 8px 12px;
-            border-left: 4px solid #e3b341; /* Restore Gold Border */
+            border-left: 4px solid #f1f1f1; /* Matching Border (Solid Block) */
             border-radius: 0 2px 2px 0;
             margin: 4px 0;
             white-space: normal;
@@ -178,7 +178,7 @@ export class PreviewPanel {
         .emoji-warning-icon {
             font-weight: bold;
             margin-right: 6px;
-            color: #856404; /* Restore Gold Icon */
+            color: inherit; /* Inherit black */
         }
         .emoji-warning em { font-style: normal; font-weight: 500; }
     </style>
@@ -203,8 +203,7 @@ export class PreviewPanel {
             if (typeof text === 'string') {
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
                 
-                // MPE-style Auto-Alert: Single Icon (Clean text replacement)
-                // Output: <span ...>! Some Text</span>
+                // MPE-style Auto-Alert: Single Icon + Texture
                 if (text.includes('⚠️')) {
                      text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning">! $2</span>');
                 }
