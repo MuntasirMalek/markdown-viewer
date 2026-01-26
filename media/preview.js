@@ -53,14 +53,14 @@ function exportPdf() {
     vscode.postMessage({ type: 'exportPdf' });
 }
 
-// BINDIRECTIONAL SYNC: Preview Scrolled -> Listen -> Send to Extension
+// BINDIRECTIONAL SYNC: Capture-Phase Listener to catch ALL scrolls
 let scrollTimeout;
-window.addEventListener('scroll', () => {
+const scrollHandler = () => {
     if (scrollTimeout) clearTimeout(scrollTimeout);
     scrollTimeout = setTimeout(() => {
         const elements = document.querySelectorAll('[data-line]');
         let targetLine = 0;
-        // Find first element that is roughly in the top 1/3 of view
+        // Find best match in top half of screen
         for (let el of elements) {
             const rect = el.getBoundingClientRect();
             if (rect.top >= 0 && rect.top < window.innerHeight / 2) {
@@ -74,5 +74,10 @@ window.addEventListener('scroll', () => {
                 line: targetLine
             });
         }
-    }, 150); // Debounce
-});
+    }, 100);
+};
+
+// Attack the listener to everything possible with capture
+window.addEventListener('scroll', scrollHandler, { capture: true });
+document.addEventListener('scroll', scrollHandler, { capture: true });
+document.body.addEventListener('scroll', scrollHandler, { capture: true });

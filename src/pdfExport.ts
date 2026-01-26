@@ -4,67 +4,57 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { createRequire } from 'module';
 
-// Global variable to cache the loaded module
-interface Puppeteer {
-    launch(options?: any): Promise<any>;
-}
-let puppeteerInstance: Puppeteer | undefined;
+// Cache
+let puppeteerInstance: any | undefined;
 
-async function loadPuppeteer(extensionUri: vscode.Uri): Promise<string | null> {
+async function loadPuppeteer(outputChannel?: vscode.OutputChannel): Promise<string | null> {
     if (puppeteerInstance) return null;
 
     const errors: string[] = [];
-    const extPath = extensionUri.fsPath;
-    const req = createRequire(extPath); // Create a require function relative to extension root
 
-    // 1. Try createRequire (most robust for packaged extensions)
+    // 1. Get Absolute Path from Extension Context
+    const ext = vscode.extensions.getExtension('utsho.markdown-viewer-enhanced');
+    if (!ext) {
+        return "Critical: Extension context not found.";
+    }
+    const extPath = ext.extensionPath;
+
+    // Strategy A: Direct Require from Extension Path (Nuclear Option)
     try {
-        // @ts-ignore
-        puppeteerInstance = req('puppeteer-core');
-        return null;
+        const puppeteerPath = path.join(extPath, 'node_modules', 'puppeteer-core');
+        if (outputChannel) outputChannel.appendLine(`Checking absolute path: ${puppeteerPath}`);
+
+        if (fs.existsSync(puppeteerPath)) {
+            const req = createRequire(path.join(extPath, 'index.js')); // Require relative to root
+            puppeteerInstance = req(puppeteerPath);
+            return null;
+        } else {
+            errors.push(`Path not found: ${puppeteerPath}`);
+        }
     } catch (e: any) {
-        errors.push(`createRequire failed: ${e.message}`);
+        errors.push(`Absolute Path Require failed: ${e.message}`);
     }
 
-    // 2. Try Dynamic Import
+    // Strategy B: Standard Require
+    try {
+        puppeteerInstance = require('puppeteer-core');
+        return null;
+    } catch (e: any) {
+        errors.push(`Standard require failed: ${e.message}`);
+    }
+
+    // Strategy C: Dynamic Import
     try {
         const mod = await import('puppeteer-core');
         puppeteerInstance = mod.default || mod;
         return null;
     } catch (e: any) {
-        errors.push(`Dynamic Import failed: ${e.message}`);
-    }
-
-    // 3. Try Standard Require
-    try {
-        // @ts-ignore
-        puppeteerInstance = require('puppeteer-core');
-        return null;
-    } catch (e: any) {
-        errors.push(`Standard Require failed: ${e.message}`);
-    }
-
-    // 4. Try Explicit Paths
-    const possiblePaths = [
-        path.join(extPath, 'node_modules', 'puppeteer-core'),
-        path.join(extPath, 'node_modules', 'puppeteer-core', 'index.js'),
-        path.join(extPath, '..', 'node_modules', 'puppeteer-core') // Dev mode fallback
-    ];
-
-    for (const p of possiblePaths) {
-        try {
-            if (fs.existsSync(p)) {
-                // @ts-ignore
-                puppeteerInstance = req(p); // Use the custom require
-                return null;
-            }
-        } catch (e: any) {
-            errors.push(`Path ${p} failed: ${e.message}`);
-        }
+        errors.push(`Dynamic import failed: ${e.message}`);
     }
 
     return errors.join('\n');
 }
+
 
 function findChromePath(): string | undefined {
     const config = vscode.workspace.getConfiguration('markdownViewer');
@@ -202,28 +192,15 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
     const outputChannel = ext?.exports?.outputChannel;
     if (outputChannel) outputChannel.appendLine(`[${new Date().toISOString()}] Starting PDF export for ${document.fileName}`);
 
-    // Debug: List files in extension dir if load fails
-    const loadErrors = await loadPuppeteer(extensionUri);
+    // Absolute Path Loading Strategy
+    const loadErrors = await loadPuppeteer(outputChannel);
     if (!puppeteerInstance) {
         if (outputChannel) {
             outputChannel.appendLine(`Failed to load puppeteer-core. Errors: \n${loadErrors}`);
-            try {
-                // Nuclear Debug: List files
-                const root = extensionUri.fsPath;
-                if (fs.existsSync(root)) {
-                    outputChannel.appendLine(`Contents of ${root}:`);
-                    fs.readdirSync(root).forEach(f => outputChannel.appendLine(` - ${f}`));
-                    const modules = path.join(root, 'node_modules');
-                    if (fs.existsSync(modules)) {
-                        outputChannel.appendLine('Contents of node_modules:');
-                        fs.readdirSync(modules).forEach(f => outputChannel.appendLine(` - ${f}`));
-                    } else {
-                        outputChannel.appendLine('node_modules folder NOT found in extension root.');
-                    }
-                }
-            } catch (e) { }
+            const root = extensionUri.fsPath;
+            outputChannel.appendLine(`Extension Root: ${root}`);
         }
-        vscode.window.showErrorMessage(`Failed to load puppeteer-core (Check Output for file structure). \nErrors: ${loadErrors?.substring(0, 150)}...`);
+        vscode.window.showErrorMessage(`Failed to load puppeteer-core. Errors: ${loadErrors?.substring(0, 200)}...`);
         return;
     }
 
@@ -242,7 +219,7 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
         try {
             p.report({ increment: 10, message: 'Launch...' });
 
-            const browser = await puppeteerInstance!.launch({ headless: true, executablePath: chromePath, args: ['--no-sandbox'] });
+            const browser = await puppeteerInstance.launch({ headless: true, executablePath: chromePath, args: ['--no-sandbox'] });
             const page = await browser.newPage();
             const html = generateHtmlForPdf(document.getText(), extensionUri);
             await page.setContent(html, { waitUntil: ['networkidle0', 'domcontentloaded'], timeout: 60000 });
