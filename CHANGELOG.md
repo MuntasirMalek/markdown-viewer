@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.16] - 2024-01-26
+
+### Fixed
+- **Double Icon Fix**: Resolved the "extra !" issue where the replacement icon was being added alongside the text's own exclamation. Now it cleanly replaces `⚠️` with a single `!`.
+- **Gray Texture Match**: Updated Blockquote and Alert background colors to `#e9e9e9` to match the exact darker gray "texture" of the reference extension.
+
 ## [1.0.15] - 2024-01-26
 
 ### Fixed

@@ -68,19 +68,14 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
         .emoji-warning {
             display: inline-block;
             width: 95%;
-            background-color: transparent;
+            background-color: #e9e9e9; /* Gray Texture */
             color: inherit;
             padding: 8px 12px;
-            border-left: 4px solid #d0d7de; /* Gray border */
+            border-left: 4px solid #d0d7de;
             border-radius: 0 2px 2px 0;
             margin: 4px 0;
             white-space: normal;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-        }
-        .emoji-warning-icon {
-            font-weight: bold;
-            margin-right: 6px;
-            color: inherit;
         }
         .emoji-warning em { font-style: normal; font-weight: 500; }
     </style>
@@ -94,7 +89,7 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
             if (typeof text === 'string') {
                 text = text.replace(/==([^=]+)==/g, '<mark style="background-color: #ffe135; border-radius: 2px; padding: 0.1em 0.2em;">$1</mark>');
                 if (text.includes('⚠️')) {
-                     text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning"><span class="emoji-warning-icon">!</span>$2</span>');
+                     text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning">! $2</span>');
                 }
             }
             return text;

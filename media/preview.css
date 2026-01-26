@@ -15,9 +15,12 @@
     --table-row-alt: transparent;
     --table-border: #dfe2e5;
 
-    /* Blockquote */
+    /* Blockquote / Alert Gray Texture */
     --blockquote-border: #d0d7de;
-    --blockquote-bg: #f6f8fa;
+    --blockquote-bg: #e9e9e9;
+    /* Darker gray to match MPE texture */
+    --alert-bg: #e9e9e9;
+    /* Match blockquote texture */
 
     /* Highlight */
     --highlight-bg: #ffe135;
@@ -211,13 +214,11 @@ td {
 
 th {
     background: transparent !important;
-    /* Force transparent */
     font-weight: 600;
 }
 
 tr:nth-child(even) {
     background: transparent !important;
-    /* Force transparent to kill zebra striping */
 }
 
 /* ===== Horizontal Rules ===== */
@@ -336,12 +337,12 @@ mark.red-highlight {
         --preview-border: #3c3c3c;
         --code-bg: #2d2d30;
         --code-border: #3c3c3c;
-        /* Plain Table Dark */
         --table-header-bg: transparent;
         --table-row-alt: transparent;
         --table-border: #3c3c3c;
         --blockquote-border: #3c3c3c;
         --blockquote-bg: #252526;
+        --alert-bg: #252526;
         --link-color: #58a6ff;
     }
 }
@@ -354,12 +355,12 @@ body.vscode-dark {
     --preview-border: #3c3c3c;
     --code-bg: #2d2d30;
     --code-border: #3c3c3c;
-    /* Plain Table Dark */
     --table-header-bg: transparent;
     --table-row-alt: transparent;
     --table-border: #3c3c3c;
     --blockquote-border: #3c3c3c;
     --blockquote-bg: #252526;
+    --alert-bg: #252526;
     --link-color: #58a6ff;
 }
 
