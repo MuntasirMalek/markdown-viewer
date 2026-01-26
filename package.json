@@ -2,7 +2,7 @@
   "name": "markdown-viewer-enhanced",
   "displayName": "Markdown Viewer Enhanced",
   "description": "Live Markdown preview with KaTeX math, syntax highlighting, floating toolbar, and PDF export via Puppeteer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "utsho",
   "author": {
     "name": "Utsho"
@@ -54,6 +54,16 @@
         "command": "markdown-viewer.exportPdf",
         "title": "Markdown Viewer: Export to PDF",
         "icon": "$(file-pdf)"
+      },
+      {
+        "command": "markdown-preview-enhanced.openPreviewToTheSide",
+        "title": "Markdown Viewer: Open Preview (Compatibility)",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "markdown-preview-enhanced.openPreview",
+        "title": "Markdown Viewer: Open Preview (Compatibility)",
+        "icon": "$(preview)"
       }
     ],
     "menus": {
