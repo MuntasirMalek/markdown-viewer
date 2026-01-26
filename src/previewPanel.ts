@@ -210,6 +210,7 @@ export class PreviewPanel {
         };
         
         renderer.blockquote = function(quote) {
+            // ... (rest of logic)
             const match = quote.match(/^<p>\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\]\\s*/i);
             if (match) {
                 const type = match[1].toLowerCase();
@@ -251,6 +252,9 @@ export class PreviewPanel {
 
         const raw = ${JSON.stringify(content)};
         document.getElementById('preview').innerHTML = renderMarkdown(raw);
+        if (typeof addLineAttributes === 'function') {
+            addLineAttributes(raw.split('\\n'));
+        }
     </script>
 </body>
 </html>`;
