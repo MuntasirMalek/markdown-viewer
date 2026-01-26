@@ -3,12 +3,16 @@ import { PreviewPanel } from './previewPanel';
 import { exportToPdf } from './pdfExport';
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('Markdown Viewer Enhanced is now active!');
+    // Create output channel
+    const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
+    context.subscriptions.push(outputChannel);
+    outputChannel.appendLine('Extension Activation Started.');
 
     // Register preview command
     const openPreview = () => {
         const editor = vscode.window.activeTextEditor;
         if (editor && editor.document.languageId === 'markdown') {
+            outputChannel.appendLine(`Opening preview for: ${editor.document.fileName}`);
             PreviewPanel.createOrShow(context.extensionUri, editor.document);
         } else {
             vscode.window.showWarningMessage('Please open a Markdown file first.');
@@ -39,6 +43,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Listen for active editor changes
     const editorChangeListener = vscode.window.onDidChangeActiveTextEditor((editor) => {
         if (editor && editor.document.languageId === 'markdown') {
+            outputChannel.appendLine(`Active Editor Changed: ${editor.document.fileName}`);
             PreviewPanel.updateContent(editor.document);
         }
     });
@@ -46,11 +51,23 @@ export function activate(context: vscode.ExtensionContext) {
     // Listen for scroll changes in editor to sync with preview
     const scrollListener = vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
         if (event.textEditor.document.languageId === 'markdown') {
-            // STRICT SAFETY CHECK: Only sync if this editor matches the previewed document
             const currentDoc = PreviewPanel.currentDocument;
+
+            // DEBUG LOG
+            /*
+            outputChannel.appendLine(`Scroll Event: ${event.textEditor.document.fileName}`);
+            if (currentDoc) {
+                outputChannel.appendLine(`Current Preview Doc: ${currentDoc.fileName}`);
+                outputChannel.appendLine(`Match? ${event.textEditor.document.uri.toString() === currentDoc.uri.toString()}`);
+            } else {
+                outputChannel.appendLine('No Current Preview Doc.');
+            }
+            */
+
             if (currentDoc && event.textEditor.document.uri.toString() === currentDoc.uri.toString()) {
                 const visibleRange = event.visibleRanges[0];
                 if (visibleRange) {
+                    // outputChannel.appendLine(`Syncing to line: ${visibleRange.start.line}`);
                     PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
                 }
             }
@@ -65,15 +82,11 @@ export function activate(context: vscode.ExtensionContext) {
         documentChangeListener,
         editorChangeListener,
         scrollListener
-        // configurationChangeListener // Uncomment and define configurationChangeListener if needed
     );
 
-    // Create output channel
-    const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
-    context.subscriptions.push(outputChannel);
-
-    // Export the channel for other modules
-    return { outputChannel };
+    // Assign output channel to exports for PDF module
+    const exports = { outputChannel };
+    return exports;
 }
 
 export function deactivate() {

@@ -8,7 +8,6 @@ export class PreviewPanel {
 
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
-    // Public getter so extension.ts can check it
     public _currentDocument: vscode.TextDocument | undefined;
     private _disposables: vscode.Disposable[] = [];
     private _lastScrollTime = 0;
@@ -80,7 +79,6 @@ export class PreviewPanel {
                         }
                         return;
                     case 'revealLine':
-                        // Throttle Editor Reveal to prevent stutter
                         if (Date.now() - this._lastScrollTime > 100) {
                             this._revealLineInEditor(message.line);
                             this._lastScrollTime = Date.now();
@@ -233,9 +231,7 @@ export class PreviewPanel {
     </style>
 </head>
 <body>
-    <div class="top-toolbar">
-        <button class="toolbar-btn" onclick="exportPdf()">Export PDF</button>
-    </div>
+    <!-- Top toolbar removed here -->
     
     <button class="fab-export" onclick="exportPdf()" title="Export to PDF">📄</button>
 
@@ -245,7 +241,6 @@ export class PreviewPanel {
         <button id="highlightBtn" title="Yellow Highlight"><span style="display:inline-block;width:14px;height:14px;background:#ffff00;border-radius:50%"></span></button>
         <button id="redHighlightBtn" title="Red Highlight"><span style="display:inline-block;width:14px;height:14px;background:#ff6b6b;border-radius:50%"></span></button>
         <button id="deleteBtn" title="Delete">🗑️</button>
-        <!-- REMOVED EXPORT BTN FROM HERE AS REQUESTED -->
     </div>
     <script id="markdown-content" type="text/plain">${escapedContent}</script>
     <script src="${scriptUri}"></script>
