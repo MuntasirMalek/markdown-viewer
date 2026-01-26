@@ -20,6 +20,7 @@ export class PreviewPanel {
             PreviewPanel.currentPanel._update();
             return;
         }
+        // RetainContextWhenHidden is crucial for sync not to break on tab switch
         const panel = vscode.window.createWebviewPanel(
             PreviewPanel.viewType,
             'Markdown Preview',
@@ -75,7 +76,11 @@ export class PreviewPanel {
                         }
                         return;
                     case 'revealLine':
-                        this._revealLineInEditor(message.line);
+                        // Throttle Editor Reveal to prevent stutter
+                        if (Date.now() - this._lastScrollTime > 100) {
+                            this._revealLineInEditor(message.line);
+                            this._lastScrollTime = Date.now();
+                        }
                         return;
                 }
             },
@@ -86,16 +91,13 @@ export class PreviewPanel {
 
     private _revealLineInEditor(line: number) {
         if (!this._currentDocument) return;
-        // Throttle incoming sync to prevent jitter
-        if (Date.now() - this._lastScrollTime < 50) return;
-        this._lastScrollTime = Date.now();
-
         const editor = vscode.window.visibleTextEditors.find(
             e => e.document.uri.toString() === this._currentDocument?.uri.toString()
         );
         if (editor) {
             const range = new vscode.Range(line, 0, line, 0);
-            editor.revealRange(range, vscode.TextEditorRevealType.AtTop);
+            // Reveal in CENTER for better context
+            editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
         }
     }
 
@@ -250,17 +252,16 @@ export class PreviewPanel {
             const blockElements = preview.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote > p, pre, .katex-display, table, .emoji-warning');
             blockElements.forEach(el => {
                 const elText = el.textContent.trim();
-                // Improved Normalization: allow unicode but remove control chars and spaces
-                const cleanElText = elText.replace(/\\s+/g, '');
+                // Normalized alphanumeric for robustness
+                const cleanElText = elText.replace(/[^a-zA-Z0-9\\u0980-\\u09ff]+/g, '');
                 
                 if (cleanElText.length < 2) return;
 
                 for (let i = 0; i < sourceLines.length; i++) {
                      if (usedLines.has(i)) continue;
                      const srcLine = sourceLines[i];
-                     const cleanSrcLine = srcLine.replace(/\\s+/g, '');
+                     const cleanSrcLine = srcLine.replace(/[^a-zA-Z0-9\\u0980-\\u09ff]+/g, '');
                      
-                     // Allow partial matches for robustness
                      if (cleanSrcLine.includes(cleanElText) || cleanElText.includes(cleanSrcLine)) {
                          el.setAttribute('data-line', i);
                          usedLines.add(i);
@@ -327,8 +328,6 @@ export class PreviewPanel {
         _inlineAddLineAttributes(raw.split('\\n'));
         
         if (!window._messageListenerAttached) {
-             // We moved initialization to preview.js to keep this clean
-             // But we need to call the inline attribute mapper
              window._messageListenerAttached = true;
         }
     </script>
