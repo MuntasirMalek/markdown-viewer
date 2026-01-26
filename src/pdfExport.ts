@@ -70,8 +70,19 @@ function findChromePath(): string | undefined {
 /**
  * Generate HTML content for PDF export
  */
-function generateHtmlForPdf(markdownContent: string): string {
-    // We'll use the same rendering approach as the preview
+function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): string {
+    const vendorPath = path.join(extensionUri.fsPath, 'media', 'vendor');
+
+    // Convert to file URIs for Puppeteer
+    const toFileUri = (p: string) => vscode.Uri.file(p).toString();
+
+    const katexCss = toFileUri(path.join(vendorPath, 'katex', 'katex.min.css'));
+    const katexJs = toFileUri(path.join(vendorPath, 'katex', 'katex.min.js'));
+    const highlightCss = toFileUri(path.join(vendorPath, 'github.min.css'));
+    const highlightJs = toFileUri(path.join(vendorPath, 'highlight.min.js'));
+    const markedJs = toFileUri(path.join(vendorPath, 'marked.min.js'));
+    const githubCss = toFileUri(path.join(vendorPath, 'github-markdown.css'));
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -80,157 +91,47 @@ function generateHtmlForPdf(markdownContent: string): string {
     <title>Markdown Export</title>
     
     <!-- KaTeX -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <link rel="stylesheet" href="${katexCss}">
+    <script src="${katexJs}"></script>
     
     <!-- Highlight.js -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
-    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <link rel="stylesheet" href="${highlightCss}">
+    <script src="${highlightJs}"></script>
     
     <!-- Marked.js -->
-    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+    <script src="${markedJs}"></script>
+    
+    <!-- GitHub Markdown CSS -->
+    <link rel="stylesheet" href="${githubCss}">
     
     <style>
-        :root {
-            --bg-preview: #ffffff;
-            --text-preview: #24292e;
-            --text-preview-secondary: #6a737d;
-            --preview-border: #eaecef;
-            --code-bg: #f6f8fa;
-            --code-border: #d0d7de;
-            --table-header-bg: #f6f8fa;
-            --table-row-alt: #f6f8fa;
-            --table-border: #d0d7de;
-            --blockquote-border: #d0d7de;
-            --blockquote-bg: #f6f8fa;
-            --highlight-bg: #ffe135;
-            --link-color: #0969da;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        /* Base styles for PDF */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: var(--bg-preview);
-            color: var(--text-preview);
-            line-height: 1.6;
-            padding: 40px;
-            max-width: 800px;
+            background-color: white;
+        }
+
+        .markdown-body {
+            box-sizing: border-box;
+            min-width: 200px;
+            max-width: 980px;
             margin: 0 auto;
+            padding: 20px;
         }
 
-        h1, h2, h3, h4, h5, h6 {
-            margin-top: 24px;
-            margin-bottom: 16px;
-            font-weight: 600;
-            line-height: 1.25;
-            color: var(--text-preview);
+        @page {
+            size: A4;
+            margin: 20mm;
         }
 
-        h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid var(--preview-border); }
-        h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--preview-border); }
-        h3 { font-size: 1.25em; }
-        h4 { font-size: 1em; }
-        h5 { font-size: 0.875em; }
-        h6 { font-size: 0.85em; color: var(--text-preview-secondary); }
-
-        p { margin-bottom: 16px; }
-
-        a { color: var(--link-color); text-decoration: none; }
-        a:hover { text-decoration: underline; }
-
-        code {
-            background: var(--code-bg);
-            padding: 0.2em 0.4em;
-            border-radius: 4px;
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            font-size: 0.9em;
-        }
-
-        pre {
-            background: var(--code-bg);
-            border: 1px solid var(--code-border);
-            border-radius: 6px;
-            padding: 16px;
-            overflow-x: auto;
-            margin-bottom: 16px;
-        }
-
-        pre code {
-            background: none;
-            padding: 0;
-            border-radius: 0;
-        }
-
-        blockquote {
-            padding: 0.5em 1em;
-            margin: 0 0 16px;
-            border-left: 4px solid var(--blockquote-border);
-            background: var(--blockquote-bg);
-            color: var(--text-preview-secondary);
-        }
-
-        ul, ol {
-            margin-bottom: 16px;
-            padding-left: 2em;
-        }
-
-        li { margin-bottom: 4px; }
-
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            margin-bottom: 16px;
-        }
-
-        th, td {
-            border: 1px solid var(--table-border);
-            padding: 8px 12px;
-            text-align: left;
-        }
-
-        th {
-            background: var(--table-header-bg);
-            font-weight: 600;
-        }
-
-        tr:nth-child(even) { background: var(--table-row-alt); }
-
-        mark {
-            background: var(--highlight-bg);
-            padding: 0.1em 0.2em;
-            border-radius: 2px;
-        }
-
-        mark.red-highlight {
-            background: #ff6b6b;
-            color: #fff;
-        }
-
-        img {
-            max-width: 100%;
-            height: auto;
-        }
-
-        hr {
-            border: none;
-            border-top: 1px solid var(--preview-border);
-            margin: 24px 0;
-        }
-
-        .katex-display {
-            overflow-x: auto;
-            overflow-y: hidden;
-            padding: 8px 0;
-        }
+        /* Fix for KaTeX in GitHub CSS */
+        .katex-display { overflow-x: auto; overflow-y: hidden; }
+        
+        /* Ensure syntax highlighting bg is correct */
+        pre { background-color: #f6f8fa !important; }
     </style>
 </head>
 <body>
-    <div id="content"></div>
+    <div class="markdown-body" id="content"></div>
     
     <script>
         // Configure marked
@@ -238,8 +139,7 @@ function generateHtmlForPdf(markdownContent: string): string {
         renderer.text = function(token) {
             let text = token.text || token;
             if (typeof text === 'string') {
-                text = text.replace(/==([^=]+)==/g, '<mark>$1</mark>');
-                text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
+                text = text.replace(/==([^=]+)==/g, '<mark style="background-color: #ffe135; border-radius: 2px; padding: 0.1em 0.2em;">$1</mark>');
             }
             return text;
         };
@@ -262,11 +162,13 @@ function generateHtmlForPdf(markdownContent: string): string {
             const mathBlocks = [];
             const inlineMath = [];
 
-            text = text.replace(/\\$\\$([^$]+)\\$\\$/g, (match, math) => {
+            // Extract display math
+            text = text.replace(/\$\$([^$]+)\$\$/g, (match, math) => {
                 mathBlocks.push(math);
                 return \`%%MATHBLOCK\${mathBlocks.length - 1}%%\`;
             });
 
+            // Extract inline math
             text = text.replace(/\\$([^$\\n]+)\\$/g, (match, math) => {
                 inlineMath.push(math);
                 return \`%%INLINEMATH\${inlineMath.length - 1}%%\`;
@@ -274,6 +176,7 @@ function generateHtmlForPdf(markdownContent: string): string {
 
             let html = marked.parse(text);
 
+            // Restore math
             html = html.replace(/%%MATHBLOCK(\\d+)%%/g, (match, index) => {
                 try {
                     return katex.renderToString(mathBlocks[parseInt(index)], {
@@ -281,7 +184,7 @@ function generateHtmlForPdf(markdownContent: string): string {
                         throwOnError: false
                     });
                 } catch (e) {
-                    return \`<span class="math-error">\${mathBlocks[parseInt(index)]}</span>\`;
+                    return match;
                 }
             });
 
@@ -292,7 +195,7 @@ function generateHtmlForPdf(markdownContent: string): string {
                         throwOnError: false
                     });
                 } catch (e) {
-                    return \`<span class="math-error">\${inlineMath[parseInt(index)]}</span>\`;
+                    return match;
                 }
             });
 
@@ -312,7 +215,7 @@ function generateHtmlForPdf(markdownContent: string): string {
 export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.TextDocument): Promise<void> {
     if (!puppeteer) {
         vscode.window.showErrorMessage(
-            'PDF export requires puppeteer-core. Please run "npm install" in the extension folder.'
+            'PDF export requires "puppeteer-core". Please ensure dependencies are installed.'
         );
         return;
     }
@@ -320,7 +223,7 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
     const chromePath = findChromePath();
     if (!chromePath) {
         const action = await vscode.window.showErrorMessage(
-            'Chrome/Chromium not found. PDF export requires Chrome, Chromium, or Edge.',
+            'Chrome/Chromium not found. PDF export requires Chrome, Chromium, or Edge to be installed.',
             'Configure Path'
         );
         if (action === 'Configure Path') {
@@ -364,12 +267,19 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
                 progress.report({ increment: 20, message: 'Rendering content...' });
 
                 const page = await browser.newPage();
-                const htmlContent = generateHtmlForPdf(document.getText());
 
-                await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+                // Pass extensionUri to resolve local resources
+                const htmlContent = generateHtmlForPdf(document.getText(), extensionUri);
+
+                // Determine local path to serve as base for relative images
+                // But for styles we used absolute file URIs.
+                await page.setContent(htmlContent, {
+                    waitUntil: ['networkidle0', 'domcontentloaded'],
+                    timeout: 30000
+                });
 
                 // Wait a bit for fonts and math to render
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(resolve => setTimeout(resolve, 1500));
 
                 progress.report({ increment: 50, message: 'Generating PDF...' });
 
