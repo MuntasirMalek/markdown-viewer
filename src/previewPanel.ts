@@ -100,12 +100,22 @@ export class PreviewPanel {
             e => e.document.uri.toString() === this._currentDocument?.uri.toString()
         );
         if (!editor || !selectedText) {
+            // Allow exportPdf even without selection if triggered by button
+            if (format === 'exportPdf') {
+                exportToPdf(this._extensionUri, this._currentDocument);
+                return;
+            }
             vscode.window.showWarningMessage('Editor not found or no text selected.');
             return;
         }
         const document = editor.document;
         const index = document.getText().indexOf(selectedText);
         if (index === -1) {
+            // Fallback for exportPdf if text not found but formatting requested (shouldn't happen for export)
+            if (format === 'exportPdf') {
+                exportToPdf(this._extensionUri, document);
+                return;
+            }
             vscode.window.showWarningMessage('Selected text not found in source.');
             return;
         }
@@ -121,6 +131,9 @@ export class PreviewPanel {
                 return;
             case 'delete':
                 editor.edit(editBuilder => editBuilder.delete(range));
+                return;
+            case 'exportPdf':
+                exportToPdf(this._extensionUri, document);
                 return;
         }
         if (wrapper) {
@@ -175,18 +188,44 @@ export class PreviewPanel {
             white-space: normal;
         }
         .emoji-warning-icon { margin-right: 6px; }
+        /* Persistent FAB */
+        .fab-export {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 25px;
+            background-color: #007acc;
+            color: white;
+            border: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 1000;
+            transition: transform 0.2s;
+        }
+        .fab-export:hover { transform: scale(1.1); background-color: #005f9e; }
     </style>
 </head>
 <body>
     <div class="top-toolbar">
         <button class="toolbar-btn" onclick="exportPdf()">Export PDF</button>
     </div>
+    
+    <!-- Floating Action Button for easy export access -->
+    <button class="fab-export" onclick="exportPdf()" title="Export to PDF">📄</button>
+
     <div class="markdown-body preview-content" id="preview"></div>
     <div class="floating-toolbar" id="floatingToolbar">
         <button id="boldBtn" title="Bold"><b>B</b></button>
         <button id="highlightBtn" title="Yellow Highlight"><span style="display:inline-block;width:14px;height:14px;background:#ffff00;border-radius:50%"></span></button>
         <button id="redHighlightBtn" title="Red Highlight"><span style="display:inline-block;width:14px;height:14px;background:#ff6b6b;border-radius:50%"></span></button>
         <button id="deleteBtn" title="Delete">🗑️</button>
+        <button id="toolbarExportBtn" title="Export PDF">📄</button>
     </div>
     <script id="markdown-content" type="text/plain">${escapedContent}</script>
     <script src="${scriptUri}"></script>
@@ -286,7 +325,6 @@ export class PreviewPanel {
                         const preview = document.getElementById('preview');
                         if (preview) {
                              const pct = line / totalLines;
-                             // Apply to window and main container just in case
                              window.scrollTo(0, pct * document.body.scrollHeight);
                              const content = document.querySelector('.preview-content');
                              if (content) content.scrollTop = pct * content.scrollHeight;

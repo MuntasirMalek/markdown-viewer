@@ -1,282 +1,59 @@
-// ===== VS Code API =====
 const vscode = acquireVsCodeApi();
 
-// Expose for toolbar buttons
-window.exportPdf = () => {
-    vscode.postMessage({
-        type: 'exportPdf'
-    });
-};
-
-// ===== DOM Elements =====
-const preview = document.getElementById('preview');
-const floatingToolbar = document.getElementById('floatingToolbar');
-const boldBtn = document.getElementById('boldBtn');
-const highlightBtn = document.getElementById('highlightBtn');
-const redHighlightBtn = document.getElementById('redHighlightBtn');
-const deleteBtn = document.getElementById('deleteBtn');
-
-// ===== State =====
-let selectedText = '';
-
-// ===== Marked.js Configuration =====
-function configureMarked() {
-    const renderer = new marked.Renderer();
-
-    // Removed custom renderer.text override for ==highlight== to avoid false positive yellow highlights.
-    // Standard text rendering only.
-
-    marked.setOptions({
-        renderer: renderer,
-        gfm: true,
-        breaks: true,
-        pedantic: false,
-        smartypants: false,
-        headerIds: true,
-        mangle: false,
-        highlight: function (code, lang) {
-            if (lang && hljs.getLanguage(lang)) {
-                try {
-                    return hljs.highlight(code, { language: lang }).value;
-                } catch (e) { }
-            }
-            return hljs.highlightAuto(code).value;
-        }
-    });
-}
-
-// ===== Markdown Rendering =====
-function renderMarkdown(text) {
-    const mathBlocks = [];
-    const inlineMath = [];
-
-    // Protect block math $$...$$
-    text = text.replace(/\$\$([^$]+)\$\$/g, (match, math) => {
-        mathBlocks.push(math);
-        return `%%MATHBLOCK${mathBlocks.length - 1}%%`;
-    });
-
-    // Protect inline math $...$
-    text = text.replace(/\$([^$\n]+)\$/g, (match, math) => {
-        inlineMath.push(math);
-        return `%%INLINEMATH${inlineMath.length - 1}%%`;
-    });
-
-    // Render markdown
-    let html = marked.parse(text);
-
-    // Restore block math
-    html = html.replace(/%%MATHBLOCK(\d+)%%/g, (match, index) => {
-        try {
-            return katex.renderToString(mathBlocks[parseInt(index)], {
-                displayMode: true,
-                throwOnError: false
-            });
-        } catch (e) {
-            return `<span class="math-error">${mathBlocks[parseInt(index)]}</span>`;
-        }
-    });
-
-    // Restore inline math
-    html = html.replace(/%%INLINEMATH(\d+)%%/g, (match, index) => {
-        try {
-            return katex.renderToString(inlineMath[parseInt(index)], {
-                displayMode: false,
-                throwOnError: false
-            });
-        } catch (e) {
-            return `<span class="math-error">${inlineMath[parseInt(index)]}</span>`;
-        }
-    });
-
-    return html;
-}
-
-function updatePreview() {
-    const contentElement = document.getElementById('markdown-content');
-    if (!contentElement) return;
-
-    // Decode HTML entities
-    const text = contentElement.textContent
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#039;/g, "'");
-
-    const sourceLines = text.split('\n');
-
-    // Render markdown
-    preview.innerHTML = renderMarkdown(text);
-
-    // Add data-line attributes for scroll sync
-    addLineAttributes(sourceLines);
-}
-
-function addLineAttributes(sourceLines) {
-    const usedLines = new Set();
-    const blockElements = preview.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote > p, pre, .katex-display, table');
-
-    blockElements.forEach(el => {
-        const elText = el.textContent.trim();
-        if (!elText || elText.length < 2) return;
-
-        const isCodeBlock = el.tagName === 'PRE';
-        const isMathBlock = el.classList?.contains('katex-display');
-        const isTable = el.tagName === 'TABLE';
-
-        const prefix = elText.substring(0, Math.min(8, elText.length));
-
-        for (let i = 0; i < sourceLines.length; i++) {
-            if (usedLines.has(i)) continue;
-
-            const srcLine = sourceLines[i];
-
-            if (isCodeBlock) {
-                if (srcLine.trim().startsWith('```')) {
-                    el.setAttribute('data-line', i);
-                    usedLines.add(i);
-                    break;
-                }
-            } else if (isMathBlock) {
-                if (srcLine.trim() === '$$' || srcLine.trim().startsWith('$$')) {
-                    el.setAttribute('data-line', i);
-                    usedLines.add(i);
-                    break;
-                }
-            } else if (isTable) {
-                if (srcLine.includes('|')) {
-                    el.setAttribute('data-line', i);
-                    usedLines.add(i);
-                    break;
-                }
-            } else {
-                const cleanSrcLine = srcLine.replace(/\*\*|__|[*_]|==|~~|`|#/g, '').trim();
-
-                if (cleanSrcLine === elText || srcLine.includes(elText)) {
-                    el.setAttribute('data-line', i);
-                    usedLines.add(i);
-                    break;
-                }
-                if (srcLine.includes(prefix) && prefix.length >= 5) {
-                    el.setAttribute('data-line', i);
-                    usedLines.add(i);
-                    break;
-                }
-            }
-        }
-    });
-}
-
-// ===== Scroll Sync =====
-function scrollToLine(line) {
-    const element = preview.querySelector(`[data-line="${line}"]`);
-    if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else {
-        // Fallback: scroll proportionally
-        const totalLines = preview.querySelectorAll('[data-line]').length;
-        if (totalLines > 0) {
-            const scrollRatio = line / totalLines;
-            preview.scrollTop = scrollRatio * (preview.scrollHeight - preview.clientHeight);
-        }
-    }
-}
-
-// ===== Floating Toolbar =====
-function showFloatingToolbar(x, y) {
-    floatingToolbar.style.left = `${x}px`;
-    floatingToolbar.style.top = `${y}px`;
-    floatingToolbar.classList.add('visible');
-}
-
-function hideFloatingToolbar() {
-    floatingToolbar.classList.remove('visible');
-    selectedText = '';
-}
-
-function handlePreviewSelection() {
+document.addEventListener('mouseup', event => {
     const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) {
-        hideFloatingToolbar();
-        return;
+    const toolbar = document.getElementById('floatingToolbar');
+
+    if (selection && selection.toString().trim().length > 0) {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+
+        // Show toolbar near the selection
+        toolbar.style.top = `${window.scrollY + rect.top - 50}px`;
+        toolbar.style.left = `${rect.left}px`;
+        toolbar.classList.add('visible');
+
+        // Store selected text for actions
+        toolbar.dataset.selectedText = selection.toString();
+    } else {
+        // Hide toolbar if clicking outside
+        if (!toolbar.contains(event.target)) {
+            toolbar.classList.remove('visible');
+        }
     }
-
-    let text = selection.toString().trim();
-    if (text.length < 1) {
-        hideFloatingToolbar();
-        return;
-    }
-
-    text = text.replace(/\s+/g, ' ').trim();
-    selectedText = text;
-
-    const range = selection.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-    const x = Math.max(10, rect.left + (rect.width / 2) - 60);
-    const y = Math.max(10, rect.top - 50);
-
-    showFloatingToolbar(x, y);
-}
+});
 
 function applyFormat(format) {
-    if (!selectedText) return;
-
-    vscode.postMessage({
-        type: 'applyFormat',
-        format: format,
-        selectedText: selectedText
-    });
-
-    hideFloatingToolbar();
-}
-
-// ===== Message Handling =====
-window.addEventListener('message', event => {
-    const message = event.data;
-    switch (message.type) {
-        case 'scrollTo':
-            scrollToLine(message.line);
-            break;
-        case 'update':
-            // Future: handle content updates via messages
-            break;
+    const toolbar = document.getElementById('floatingToolbar');
+    const selectedText = toolbar.dataset.selectedText;
+    if (selectedText) {
+        vscode.postMessage({
+            type: 'applyFormat',
+            format: format,
+            selectedText: selectedText
+        });
+        toolbar.classList.remove('visible');
+        window.getSelection().removeAllRanges();
     }
-});
-
-// ===== Event Listeners =====
-document.addEventListener('mouseup', () => {
-    setTimeout(handlePreviewSelection, 10);
-});
-
-document.addEventListener('mousedown', (e) => {
-    if (!floatingToolbar.contains(e.target)) {
-        hideFloatingToolbar();
-    }
-});
-
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        hideFloatingToolbar();
-    }
-});
-
-if (boldBtn) {
-    boldBtn.addEventListener('click', () => applyFormat('bold'));
 }
 
-if (highlightBtn) {
-    highlightBtn.addEventListener('click', () => applyFormat('highlight'));
+// Bind buttons
+document.getElementById('boldBtn').onclick = () => applyFormat('bold');
+document.getElementById('highlightBtn').onclick = () => applyFormat('highlight');
+document.getElementById('redHighlightBtn').onclick = () => applyFormat('red-highlight');
+document.getElementById('deleteBtn').onclick = () => applyFormat('delete');
+
+// Bind new Export button in floating toolbar
+const exportBtn = document.getElementById('toolbarExportBtn');
+if (exportBtn) {
+    exportBtn.onclick = () => {
+        exportPdf();
+        const toolbar = document.getElementById('floatingToolbar');
+        toolbar.classList.remove('visible');
+        window.getSelection().removeAllRanges();
+    };
 }
 
-if (redHighlightBtn) {
-    redHighlightBtn.addEventListener('click', () => applyFormat('red-highlight'));
+function exportPdf() {
+    vscode.postMessage({ type: 'exportPdf' });
 }
-
-if (deleteBtn) {
-    deleteBtn.addEventListener('click', () => applyFormat('delete'));
-}
-
-// ===== Initialization =====
-configureMarked();
-updatePreview();
