@@ -8,9 +8,14 @@ export class PreviewPanel {
 
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
-    private _currentDocument: vscode.TextDocument | undefined;
+    // Public getter so extension.ts can check it
+    public _currentDocument: vscode.TextDocument | undefined;
     private _disposables: vscode.Disposable[] = [];
     private _lastScrollTime = 0;
+
+    public static get currentDocument(): vscode.TextDocument | undefined {
+        return PreviewPanel.currentPanel ? PreviewPanel.currentPanel._currentDocument : undefined;
+    }
 
     public static createOrShow(extensionUri: vscode.Uri, document: vscode.TextDocument) {
         const column = vscode.ViewColumn.Beside;
@@ -20,7 +25,6 @@ export class PreviewPanel {
             PreviewPanel.currentPanel._update();
             return;
         }
-        // RetainContextWhenHidden is crucial for sync not to break on tab switch
         const panel = vscode.window.createWebviewPanel(
             PreviewPanel.viewType,
             'Markdown Preview',
@@ -96,7 +100,6 @@ export class PreviewPanel {
         );
         if (editor) {
             const range = new vscode.Range(line, 0, line, 0);
-            // Reveal in CENTER for better context
             editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
         }
     }
@@ -194,6 +197,7 @@ export class PreviewPanel {
     <style>
         .markdown-body { box-sizing: border-box; min-width: 200px; max-width: 980px; margin: 0 auto; padding: 45px; }
         @media (max-width: 767px) { .markdown-body { padding: 15px; } }
+        /* MPE-style: Solid Gray Blocks */
         .emoji-warning {
             display: inline-block;
             width: 95%; 
@@ -241,7 +245,7 @@ export class PreviewPanel {
         <button id="highlightBtn" title="Yellow Highlight"><span style="display:inline-block;width:14px;height:14px;background:#ffff00;border-radius:50%"></span></button>
         <button id="redHighlightBtn" title="Red Highlight"><span style="display:inline-block;width:14px;height:14px;background:#ff6b6b;border-radius:50%"></span></button>
         <button id="deleteBtn" title="Delete">🗑️</button>
-        <button id="toolbarExportBtn" title="Export PDF">📄</button>
+        <!-- REMOVED EXPORT BTN FROM HERE AS REQUESTED -->
     </div>
     <script id="markdown-content" type="text/plain">${escapedContent}</script>
     <script src="${scriptUri}"></script>
@@ -252,9 +256,7 @@ export class PreviewPanel {
             const blockElements = preview.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote > p, pre, .katex-display, table, .emoji-warning');
             blockElements.forEach(el => {
                 const elText = el.textContent.trim();
-                // Normalized alphanumeric for robustness
                 const cleanElText = elText.replace(/[^a-zA-Z0-9\\u0980-\\u09ff]+/g, '');
-                
                 if (cleanElText.length < 2) return;
 
                 for (let i = 0; i < sourceLines.length; i++) {

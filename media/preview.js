@@ -54,32 +54,43 @@ function exportPdf() {
 }
 
 // ============================================
-// ANIMATION ENGINE: Lerp Loop (Game Style)
+// ANIMATION ENGINE: Robust Lerp Loop
 // ============================================
 
 let animationFrameId = null;
-let targetScrollY = window.scrollY; // The goal
+let targetScrollY = window.scrollY;
 let isAutoScrolling = false;
+let safetyTimeout = null;
 
 // Kill Switch
 const killScroll = () => {
     if (isAutoScrolling) {
         isAutoScrolling = false;
-        targetScrollY = window.scrollY; // Reset target to current to stop drift
+        targetScrollY = window.scrollY;
         if (animationFrameId) {
             cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
         }
+        if (safetyTimeout) clearTimeout(safetyTimeout);
     }
 };
 
-window.addEventListener('mousedown', killScroll);
-window.addEventListener('wheel', killScroll, { passive: true });
-window.addEventListener('touchstart', killScroll, { passive: true });
-window.addEventListener('keydown', killScroll);
+const userAction = (e) => {
+    // Only kill if it's a real user event, not synthetic
+    if (e.isTrusted) killScroll();
+};
+
+window.addEventListener('mousedown', userAction);
+window.addEventListener('wheel', userAction, { passive: true });
+window.addEventListener('touchstart', userAction, { passive: true });
+window.addEventListener('keydown', userAction);
 
 function startScrollLoop() {
-    if (animationFrameId) return; // Already running
+    if (animationFrameId) return;
+
+    // Safety: Kill auto-scroll after 3 seconds max (prevents stuck lock)
+    if (safetyTimeout) clearTimeout(safetyTimeout);
+    safetyTimeout = setTimeout(() => { killScroll(); }, 3000);
 
     function loop() {
         if (!isAutoScrolling) {
@@ -89,22 +100,25 @@ function startScrollLoop() {
 
         const currentY = window.scrollY;
 
-        // Linear Interpolation: Move 20% of the distance each frame
-        // This creates a natural "slide" that slows down as it arrives.
-        // It handles rapid target updates perfectly (just changes direction).
+        // Validation
+        if (isNaN(targetScrollY) || isNaN(currentY)) {
+            killScroll(); // Abort on NaN
+            return;
+        }
+
         const diff = targetScrollY - currentY;
 
-        if (Math.abs(diff) < 1) {
-            // Arrived
-            window.scrollTo(0, targetScrollY);
+        // Stop if close enough
+        if (Math.abs(diff) < 1.0) {
+            window.scrollTo({ top: targetScrollY, behavior: 'auto' });
             isAutoScrolling = false;
             animationFrameId = null;
             return;
         }
 
-        // Speed factor: 0.2 = fast smooth, 0.1 = slow smooth
+        // Lerp factor 0.2
         const nextY = currentY + (diff * 0.2);
-        window.scrollTo(0, nextY);
+        window.scrollTo({ top: nextY, behavior: 'auto' });
 
         animationFrameId = requestAnimationFrame(loop);
     }
@@ -121,18 +135,20 @@ function startScrollLoop() {
 let lastSyncSend = 0;
 
 // 1. Preview -> Editor (User Scrolled Preview)
-const scrollHandler = () => {
+const scrollHandler = (e) => {
     // If auto-scrolling, ignore
     if (isAutoScrolling) return;
 
+    // Also ignore if recently killed (debounce echo)
+    // No, killScroll resets isAutoScrolling immediately.
+
     const now = Date.now();
-    if (now - lastSyncSend < 50) return; // Throttle 20fps
+    if (now - lastSyncSend < 50) return;
     lastSyncSend = now;
 
     const elements = document.querySelectorAll('[data-line]');
     if (elements.length === 0) return;
 
-    // Center-biased detection
     const centerY = window.scrollY + (window.innerHeight / 2);
     let bestLine = -1;
     let minDist = Infinity;
@@ -165,16 +181,12 @@ window.addEventListener('message', event => {
         const line = message.line;
         const totalLines = message.totalLines;
 
-        // Calculate Target Y
         let newTargetY = 0;
 
-        // Exact Match
         const exactEl = document.querySelector(`[data-line="${line}"]`);
         if (exactEl) {
-            // Center Align
             newTargetY = exactEl.offsetTop - (window.innerHeight / 2) + (exactEl.clientHeight / 2);
         } else {
-            // Interpolation
             const elements = Array.from(document.querySelectorAll('[data-line]'));
             if (elements.length > 0) {
                 const sorted = elements.map(el => ({
@@ -199,23 +211,25 @@ window.addEventListener('message', event => {
                 } else if (after) {
                     rawY = 0;
                 }
-                newTargetY = rawY - (window.innerHeight / 2); // Center
+                newTargetY = rawY - (window.innerHeight / 2);
             } else if (totalLines) {
-                // Percentage
                 const pct = line / totalLines;
                 newTargetY = pct * document.body.scrollHeight;
             }
         }
 
-        // Bounds Check
-        newTargetY = Math.max(0, Math.min(newTargetY, document.body.scrollHeight - window.innerHeight));
+        // Bounds & NaN Check
+        if (isNaN(newTargetY)) return; // Protection
 
-        // Update Target (Game Loop handles the rest)
-        targetScrollY = newTargetY;
+        const maxScroll = Math.max(0, document.body.scrollHeight - window.innerHeight);
+        newTargetY = Math.max(0, Math.min(newTargetY, maxScroll));
 
-        // Start loop if not running
-        if (!isAutoScrolling) {
-            startScrollLoop();
+        // Only update if difference is significant
+        if (Math.abs(newTargetY - targetScrollY) > 2 || !isAutoScrolling) {
+            targetScrollY = newTargetY;
+            if (!isAutoScrolling) {
+                startScrollLoop();
+            }
         }
     }
 });

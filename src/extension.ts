@@ -46,9 +46,13 @@ export function activate(context: vscode.ExtensionContext) {
     // Listen for scroll changes in editor to sync with preview
     const scrollListener = vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
         if (event.textEditor.document.languageId === 'markdown') {
-            const visibleRange = event.visibleRanges[0];
-            if (visibleRange) {
-                PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
+            // STRICT SAFETY CHECK: Only sync if this editor matches the previewed document
+            const currentDoc = PreviewPanel.currentDocument;
+            if (currentDoc && event.textEditor.document.uri.toString() === currentDoc.uri.toString()) {
+                const visibleRange = event.visibleRanges[0];
+                if (visibleRange) {
+                    PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
+                }
             }
         }
     });
