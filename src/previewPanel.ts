@@ -162,24 +162,20 @@ export class PreviewPanel {
         .toolbar-btn:hover { background: var(--vscode-button-hoverBackground); }
         .katex-display { overflow-x: auto; overflow-y: hidden; }
         
-        /* Magic Auto-Alert: Monochrome / Plain Style */
+        /* Magic Auto-Alert: Gray Texture with Plain Icon */
         .emoji-warning {
             display: inline-block;
             width: 95%; 
-            background-color: transparent;
-            color: inherit; /* Inherit text color */
+            background-color: #e9e9e9; /* Match Blockquote Texture */
+            color: inherit;
             padding: 8px 12px;
-            border-left: 4px solid #d0d7de; /* Gray border instead of yellow */
+            border-left: 4px solid #d0d7de;
             border-radius: 0 2px 2px 0;
             margin: 4px 0;
             white-space: normal;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
         }
-        .emoji-warning-icon {
-            font-weight: bold;
-            margin-right: 6px;
-            color: inherit; /* Inherit color, no yellow/brown */
-        }
+        /* No extra icon class styling needed if proper text replacement is used */
         .emoji-warning em { font-style: normal; font-weight: 500; }
     </style>
 </head>
@@ -203,9 +199,11 @@ export class PreviewPanel {
             if (typeof text === 'string') {
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
                 
-                // MPE-style Auto-Alert: Replace ⚠️ with ! but monochrome
+                // MPE-style Auto-Alert: "Extra !" fix.
+                // Replace ⚠️ with ! and enclose in span. Do NOT add extra icon inside.
+                // Output: ! Some Text
                 if (text.includes('⚠️')) {
-                     text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning"><span class="emoji-warning-icon">!</span>$2</span>');
+                     text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning">! $2</span>');
                 }
             }
             return text;
