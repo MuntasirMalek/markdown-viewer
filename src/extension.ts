@@ -62,7 +62,7 @@ export function activate(context: vscode.ExtensionContext) {
             // 1. TIMESTAMP GATE (THE GUARD)
             // If the preview scrolled the editor recently (< 1000ms), STOP.
             // This prevents the loop/jitter.
-            if (Date.now() - PreviewPanel.lastRemoteScrollTime < 300) {
+            if (Date.now() - PreviewPanel.lastRemoteScrollTime < 500) {
                 return;
             }
 

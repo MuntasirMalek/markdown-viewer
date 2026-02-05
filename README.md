@@ -11,8 +11,11 @@ Live Markdown preview with KaTeX math, syntax highlighting, floating toolbar, an
 ✅ **Syntax Highlighting** — Beautiful code blocks with highlight.js  
 ✅ **Floating Toolbar** — Quick formatting with bold, highlight, and delete tools  
 ✅ **PDF Export** — Export to PDF using Chrome Puppeteer  
-✅ **Scroll Sync** — Preview scrolls with your editor  
-✅ **Dark Mode** — Adapts to VS Code's theme  
+✅ **Scroll Sync** — Bi-directional scroll sync between editor and preview  
+✅ **Undo/Redo** — Full undo/redo support from the preview panel (`Cmd+Z` / `Cmd+Shift+Z`)  
+✅ **Relative Images** — Images with relative paths display correctly  
+✅ **GitHub Alerts** — Support for `[!NOTE]`, `[!WARNING]`, `[!TIP]` etc.  
+✅ **Red Highlight** — Custom `::text::` syntax for red highlights  
 
 ## Installation
 
@@ -66,6 +69,8 @@ Then press `F5` to run in development mode.
 |--------|-----|---------------|
 | Open Preview | `Cmd+Shift+V` | `Ctrl+Shift+V` |
 | Export to PDF | `Cmd+Shift+E` | `Ctrl+Shift+E` |
+| Undo (from preview) | `Cmd+Z` | `Ctrl+Z` |
+| Redo (from preview) | `Cmd+Shift+Z` | `Ctrl+Shift+Z` |
 
 ## Supported Syntax
 
@@ -74,7 +79,9 @@ Then press `F5` to run in development mode.
 - Code blocks with syntax highlighting
 - LaTeX math: `$inline$` and `$$block$$`
 - Tables, blockquotes, links, images
-- Highlights with `==text==`
+- Yellow highlight with `==text==`
+- Red highlight with `::text::`
+- GitHub alerts: `[!NOTE]`, `[!TIP]`, `[!WARNING]`, `[!CAUTION]`
 
 ### Math Examples
 

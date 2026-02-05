@@ -31,6 +31,11 @@ export class PreviewPanel {
             }
             return;
         }
+        // Include document's directory in localResourceRoots for relative image paths
+        const docDir = document ? vscode.Uri.file(path.dirname(document.uri.fsPath)) : null;
+        const resourceRoots = [vscode.Uri.joinPath(extensionUri, 'media')];
+        if (docDir) { resourceRoots.push(docDir); }
+
         const panel = vscode.window.createWebviewPanel(
             PreviewPanel.viewType,
             'Markdown Preview',
@@ -38,7 +43,7 @@ export class PreviewPanel {
             {
                 enableScripts: true,
                 retainContextWhenHidden: true,
-                localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')]
+                localResourceRoots: resourceRoots
             }
         );
         PreviewPanel.currentPanel = new PreviewPanel(panel, extensionUri, document);
@@ -101,6 +106,12 @@ export class PreviewPanel {
                             this._lastScrollTime = Date.now();
                         }
                         return;
+                    case 'undo':
+                        this._focusEditorAndExecute('undo');
+                        return;
+                    case 'redo':
+                        this._focusEditorAndExecute('redo');
+                        return;
                 }
             },
             null,
@@ -118,6 +129,21 @@ export class PreviewPanel {
             PreviewPanel.lastRemoteScrollTime = Date.now();
             const range = new vscode.Range(line, 0, line, 0);
             editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+        }
+    }
+
+    private async _focusEditorAndExecute(command: string) {
+        if (!this._currentDocument) return;
+        const editor = vscode.window.visibleTextEditors.find(
+            e => e.document.uri.toString() === this._currentDocument?.uri.toString()
+        );
+        if (editor) {
+            // Focus the editor first
+            await vscode.window.showTextDocument(editor.document, editor.viewColumn, false);
+            // Then execute the command
+            await vscode.commands.executeCommand(command);
+            // Return focus to preview
+            this._panel.reveal(undefined, true);
         }
     }
 
@@ -422,6 +448,10 @@ export class PreviewPanel {
 
     private _getHtmlForWebview(webview: vscode.Webview): string {
         const content = this._currentDocument?.getText() || '';
+        // Get document folder for resolving relative image paths
+        const documentDir = this._currentDocument ? path.dirname(this._currentDocument.uri.fsPath) : '';
+        const documentBaseUri = documentDir ? webview.asWebviewUri(vscode.Uri.file(documentDir)).toString() : '';
+
         const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'preview.css'));
         const katexCss = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'katex', 'katex.min.css'));
         const katexJs = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'katex', 'katex.min.js'));
@@ -439,36 +469,23 @@ export class PreviewPanel {
         const previousState = vscode.getState();
         let savedScrollTop = previousState ? previousState.scrollTop : 0;
         
-        // ========== VISUAL DEBUG MODE ==========
-        const DEBUG = false;
-        const debugEl = document.createElement('div');
-        debugEl.id = 'debug-overlay';
-        debugEl.style.cssText = 'position:fixed;bottom:10px;left:10px;background:rgba(0,0,0,0.85);color:#0f0;font-family:monospace;font-size:11px;padding:8px 12px;border-radius:6px;z-index:9999;max-width:350px;max-height:200px;overflow:auto;';
-        debugEl.innerHTML = 'DEBUG: Loading...';
-        if (DEBUG) document.body.appendChild(debugEl);
+        // ========== SCROLL SYNC STATE ==========
+        let lastEditorScrollTime = 0;   // When we last received a scroll from editor
+        let lastPreviewScrollTime = 0;  // When we last sent a scroll to editor
+        let scrollDebounceTimer = null;
         
-        function debugLog(msg) {
-            if (!DEBUG) return;
-            const time = new Date().toLocaleTimeString();
-            debugEl.innerHTML = '[' + time + '] ' + msg + '<br>' + debugEl.innerHTML;
-            if (debugEl.children.length > 15) debugEl.lastChild.remove();
-        }
-
-        window.onerror = function(message, source, lineno, colno, error) {
-            vscode.postMessage({ type: 'error', text: \`\${message} at line \${lineno}\` });
-            debugLog('❌ ERROR: ' + message);
-        };
-
-        let ignoreSyncUntil = 0; 
-        let lastSyncSend = 0;
-        
+        // Get preview element - it should exist since script is at end of body
         const previewEl = document.getElementById('preview');
-        debugLog('previewEl found: ' + !!previewEl);
         
+        if (!previewEl) {
+            console.error('Preview element not found!');
+        }
+        
+        // Restore scroll position
         if (previewEl && savedScrollTop > 0) {
             setTimeout(() => {
+                lastEditorScrollTime = Date.now();
                 previewEl.scrollTop = savedScrollTop;
-                debugLog('🔄 Restored scroll: ' + savedScrollTop);
             }, 50);
         }
         
@@ -478,59 +495,77 @@ export class PreviewPanel {
             }
         }
 
-        const scrollHandler = (e) => {
-            if (Date.now() < ignoreSyncUntil) {
-                debugLog('⏸️ Scroll ignored (lockout)');
+        // Preview scroll handler - syncs preview scrolling back to editor
+        function handlePreviewScroll(e) {
+            saveScrollPosition();
+            
+            // If editor just scrolled us, don't sync back (prevents loop)
+            if (Date.now() - lastEditorScrollTime < 300) {
                 return;
             }
+            
+            // Debounce: only sync after scroll stops for 100ms
+            if (scrollDebounceTimer) clearTimeout(scrollDebounceTimer);
+            scrollDebounceTimer = setTimeout(() => {
+                // Throttle: don't send too frequently
+                if (Date.now() - lastPreviewScrollTime < 100) return;
+                lastPreviewScrollTime = Date.now();
 
-            const now = Date.now();
-            if (now - lastSyncSend < 50) return; 
-            lastSyncSend = now;
+                const elements = document.querySelectorAll('[data-line]');
+                if (elements.length === 0) return;
 
-            const elements = document.querySelectorAll('[data-line]');
-            debugLog('📜 Scroll! data-line elements: ' + elements.length);
-            if (elements.length === 0) return;
-
-            const scrollTop = previewEl ? previewEl.scrollTop : 0;
-            const viewHeight = previewEl ? previewEl.clientHeight : window.innerHeight;
-            const centerY = scrollTop + (viewHeight / 2);
-            let bestLine = -1;
-            let minDist = Infinity;
-
-            for (const el of elements) {
-                const elTop = el.offsetTop;
-                const dist = Math.abs(elTop - centerY);
-                if (dist < minDist) {
-                    minDist = dist;
-                    bestLine = parseInt(el.getAttribute('data-line'));
+                const scrollTop = previewEl.scrollTop;
+                const viewHeight = previewEl.clientHeight;
+                const scrollHeight = previewEl.scrollHeight;
+                
+                // Edge case: at bottom
+                if (scrollTop + viewHeight >= scrollHeight - 10) {
+                    const lastEl = elements[elements.length - 1];
+                    const lastLine = parseInt(lastEl.getAttribute('data-line')) || 0;
+                    vscode.postMessage({ type: 'revealLine', line: lastLine });
+                    return;
                 }
-            }
-            if (bestLine >= 0) {
-                debugLog('➡️ Sending revealLine: ' + bestLine);
-                vscode.postMessage({ type: 'revealLine', line: bestLine });
-            }
-        };
+                
+                // Edge case: at top
+                if (scrollTop <= 10) {
+                    vscode.postMessage({ type: 'revealLine', line: 0 });
+                    return;
+                }
+                
+                // Normal case: find element at center of view
+                const centerY = scrollTop + (viewHeight / 2);
+                let bestLine = -1;
+                let minDist = Infinity;
 
+                for (const el of elements) {
+                    const elTop = el.offsetTop;
+                    const dist = Math.abs(elTop - centerY);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        bestLine = parseInt(el.getAttribute('data-line'));
+                    }
+                }
+                if (bestLine >= 0) {
+                    vscode.postMessage({ type: 'revealLine', line: bestLine });
+                }
+            }, 100);
+        }
+        
+        // Attach scroll listener
         if (previewEl) {
-            previewEl.addEventListener('scroll', (e) => {
-                saveScrollPosition();
-                scrollHandler(e);
-            }, { passive: true });
-            debugLog('✅ Scroll listener attached to #preview');
-        } else {
-            debugLog('❌ #preview NOT FOUND!');
+            previewEl.addEventListener('scroll', handlePreviewScroll, { passive: true });
         }
 
+        // Handle scroll messages from editor
         window.addEventListener('message', event => {
             const message = event.data;
             if (message.type === 'scrollTo') {
-                debugLog('⬅️ Received scrollTo: line ' + message.line);
                 const line = message.line;
-                const newTargetY = calculateTargetY(line, message.totalLines);
-                debugLog('📍 Target Y: ' + Math.round(newTargetY));
+                const totalLines = message.totalLines || 1;
+                const newTargetY = calculateTargetY(line, totalLines);
+                
                 if (!isNaN(newTargetY) && previewEl) {
-                    ignoreSyncUntil = Date.now() + 200;
+                    lastEditorScrollTime = Date.now();
                     previewEl.scrollTo({ top: newTargetY, behavior: 'auto' });
                 }
             }
@@ -538,34 +573,53 @@ export class PreviewPanel {
 
         function calculateTargetY(line, totalLines) {
             const viewHeight = previewEl ? previewEl.clientHeight : window.innerHeight;
+            const scrollHeight = previewEl ? previewEl.scrollHeight : document.body.scrollHeight;
             const halfView = viewHeight / 2;
             
+            // Edge case: near end of document
+            if (totalLines && line >= totalLines - 3) {
+                return scrollHeight - viewHeight;  // Scroll to bottom
+            }
+            
+            // Edge case: at start
+            if (line <= 1) {
+                return 0;
+            }
+            
+            // Try to find exact element
             const exactEl = document.querySelector(\`[data-line="\${line}"]\`);
             if (exactEl) {
-                 const target = exactEl.offsetTop - halfView + (exactEl.clientHeight / 2);
-                 return Math.max(0, target);
+                const target = exactEl.offsetTop - halfView + (exactEl.clientHeight / 2);
+                return Math.max(0, Math.min(target, scrollHeight - viewHeight));
             }
+            
+            // Interpolate between known elements
             const elements = Array.from(document.querySelectorAll('[data-line]'));
             if (elements.length > 0) {
-                 const sorted = elements.map(el => ({
-                     line: parseInt(el.getAttribute('data-line')),
-                     top: el.offsetTop
-                 })).sort((a, b) => a.line - b.line);
-                 let before = null, after = null;
-                 for (const item of sorted) {
-                     if (item.line <= line) before = item;
-                     else { after = item; break; }
-                 }
-                 let target = 0;
-                 if (before && after) {
-                      const ratio = (line - before.line) / (after.line - before.line);
-                      target = before.top + (after.top - before.top) * ratio - halfView;
-                 } else if (before) {
-                      target = before.top - halfView;
-                 }
-                 return Math.max(0, target);
-            } else if (totalLines) {
-                 return Math.max(0, (line / totalLines) * (previewEl ? previewEl.scrollHeight : document.body.scrollHeight));
+                const sorted = elements.map(el => ({
+                    line: parseInt(el.getAttribute('data-line')),
+                    top: el.offsetTop
+                })).sort((a, b) => a.line - b.line);
+                
+                let before = null, after = null;
+                for (const item of sorted) {
+                    if (item.line <= line) before = item;
+                    else { after = item; break; }
+                }
+                
+                let target = 0;
+                if (before && after) {
+                    const ratio = (line - before.line) / (after.line - before.line);
+                    target = before.top + (after.top - before.top) * ratio - halfView;
+                } else if (before) {
+                    target = before.top - halfView;
+                }
+                return Math.max(0, Math.min(target, scrollHeight - viewHeight));
+            }
+            
+            // Fallback: proportional scroll
+            if (totalLines) {
+                return Math.max(0, (line / totalLines) * scrollHeight);
             }
             return 0;
         }
@@ -629,6 +683,30 @@ export class PreviewPanel {
         document.getElementById('redHighlightBtn').onclick = () => applyToolbarFormat('red-highlight');
         document.getElementById('deleteBtn').onclick = () => applyToolbarFormat('delete');
         document.querySelector('.fab-export').onclick = () => exportPdf();
+        
+        // ========== KEYBOARD SHORTCUTS (UNDO/REDO) ==========
+        // Capture Cmd+Z and Cmd+Shift+Z to trigger undo/redo in the editor
+        document.addEventListener('keydown', (e) => {
+            // Check for Cmd (Mac) or Ctrl (Windows/Linux)
+            const isMod = e.metaKey || e.ctrlKey;
+            
+            if (isMod && e.key === 'z') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    // Cmd+Shift+Z = Redo
+                    vscode.postMessage({ type: 'redo' });
+                } else {
+                    // Cmd+Z = Undo
+                    vscode.postMessage({ type: 'undo' });
+                }
+            }
+            
+            // Also support Cmd+Y for redo (Windows style)
+            if (isMod && e.key === 'y') {
+                e.preventDefault();
+                vscode.postMessage({ type: 'redo' });
+            }
+        });
         `;
 
         return `<!DOCTYPE html>
@@ -636,7 +714,7 @@ export class PreviewPanel {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; img-src ${webview.cspSource} https: data:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; img-src ${webview.cspSource} https: data: file:;">
     <title>Markdown Preview</title>
     <link rel="stylesheet" href="${katexCss}">
     <script src="${katexJs}"></script>
@@ -648,18 +726,6 @@ export class PreviewPanel {
     <style>
         .markdown-body { box-sizing: border-box; min-width: 200px; max-width: 980px; margin: 0 auto; padding: 45px; }
         @media (max-width: 767px) { .markdown-body { padding: 15px; } }
-        .emoji-warning {
-            display: inline-block;
-            width: 95%; 
-            background-color: #f1f1f1; 
-            color: #24292e;
-            padding: 8px 12px;
-            border-left: 4px solid #f1f1f1; 
-            border-radius: 0 2px 2px 0;
-            margin: 4px 0;
-            white-space: normal;
-        }
-        .emoji-warning-icon { margin-right: 6px; }
         .fab-export {
             position: fixed;
             bottom: 20px;
@@ -700,24 +766,91 @@ export class PreviewPanel {
         function _inlineAddLineAttributes(sourceLines) {
             const preview = document.getElementById('preview');
             const usedLines = new Set();
+            
+            // Normalize text for comparison (remove markdown syntax, whitespace)
+            function normalize(text) {
+                return (text || '')
+                    .replace(/[*_=~\`#\\[\\]()]/g, '')  // Remove markdown chars
+                    .replace(/\\s+/g, '')              // Remove whitespace
+                    .toLowerCase()
+                    .substring(0, 50);                 // Only compare first 50 chars
+            }
+            
+            // Build a map of normalized source lines for quick lookup
+            const sourceMap = sourceLines.map((line, idx) => ({
+                idx: idx,
+                raw: line,
+                norm: normalize(line)
+            }));
+            
+            // Get all block elements that should have data-line
             const blockElements = preview.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote > p, pre, .katex-display, table, .emoji-warning');
+            
+            // Track our position in source as we go through elements
+            let searchStartIdx = 0;
+            
             blockElements.forEach(el => {
-                const elText = el.textContent.trim();
-                const cleanElText = elText.replace(/\\s+/g, '');
-                if (cleanElText.length < 2) return;
-
-                for (let i = 0; i < sourceLines.length; i++) {
-                     if (usedLines.has(i)) continue;
-                     const srcLine = sourceLines[i];
-                     const cleanSrcLine = srcLine.replace(/\\s+/g, '');
-                     
-                     if (cleanSrcLine.includes(cleanElText) || cleanElText.includes(cleanSrcLine)) {
-                         el.setAttribute('data-line', i);
-                         usedLines.add(i);
-                         break;
-                     }
+                const elText = el.textContent || '';
+                const normElText = normalize(elText);
+                
+                // Skip very short elements
+                if (normElText.length < 2) return;
+                
+                // Search forward from our last position (not from 0)
+                // This maintains document order and prevents wrong matches
+                let bestMatch = -1;
+                let bestScore = 0;
+                
+                for (let i = searchStartIdx; i < sourceMap.length; i++) {
+                    if (usedLines.has(i)) continue;
+                    
+                    const srcNorm = sourceMap[i].norm;
+                    if (srcNorm.length < 2) continue;
+                    
+                    // Calculate match score
+                    let score = 0;
+                    if (srcNorm === normElText) {
+                        score = 100;  // Perfect match
+                    } else if (srcNorm.includes(normElText) || normElText.includes(srcNorm)) {
+                        // Partial match - score based on overlap
+                        const overlap = Math.min(srcNorm.length, normElText.length);
+                        score = overlap;
+                    }
+                    
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMatch = i;
+                        
+                        // If perfect match, stop searching
+                        if (score === 100) break;
+                    }
+                    
+                    // Don't search too far ahead (within 20 lines)
+                    if (i - searchStartIdx > 20 && bestMatch !== -1) break;
+                }
+                
+                if (bestMatch !== -1 && bestScore >= 3) {
+                    el.setAttribute('data-line', bestMatch);
+                    usedLines.add(bestMatch);
+                    // Move search start forward
+                    searchStartIdx = bestMatch + 1;
                 }
             });
+            
+            // Fallback: assign evenly distributed line numbers to unmatched elements
+            const unmatched = Array.from(blockElements).filter(el => !el.hasAttribute('data-line'));
+            if (unmatched.length > 0 && sourceLines.length > 0) {
+                const step = Math.max(1, Math.floor(sourceLines.length / unmatched.length));
+                let line = 0;
+                unmatched.forEach((el, idx) => {
+                    while (usedLines.has(line) && line < sourceLines.length) line++;
+                    if (line < sourceLines.length) {
+                        el.setAttribute('data-line', line);
+                        usedLines.add(line);
+                        line += step;
+                    }
+                });
+            }
         }
 
         const renderer = new marked.Renderer();
@@ -726,9 +859,6 @@ export class PreviewPanel {
             if (typeof text === 'string') {
                 text = text.replace(/==([^=]+)==/g, '<mark>$1</mark>');
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
-                if (text.includes('⚠️')) {
-                     text = text.replace(/(⚠️)(\\s*[^<\\n]+)/g, '<span class="emoji-warning">$1 $2</span>');
-                }
             }
             return text;
         };
@@ -762,8 +892,6 @@ export class PreviewPanel {
             text = text.replace(/\\$\\$([^$]+)\\$\\$/g, (m, math) => { mathBlocks.push(math); return \`%%MATHBLOCK\${mathBlocks.length-1}%%\`; });
             text = text.replace(/\\$([^$\\n]+)\\$/g, (m, math) => { inlineMath.push(math); return \`%%INLINEMATH\${inlineMath.length-1}%%\`; });
             
-            text = text.replace(/==([^=]+)==/g, '<mark>$1</mark>');
-            
             let html = marked.parse(text);
             html = html.replace(/%%MATHBLOCK(\\d+)%%/g, (m, i) => {
                 try { return katex.renderToString(mathBlocks[parseInt(i)], { displayMode: true, throwOnError: false }); } catch(e) { return m; }
@@ -775,7 +903,18 @@ export class PreviewPanel {
         }
 
         const raw = ${JSON.stringify(content)};
+        const documentBaseUri = "${documentBaseUri}";
         document.getElementById('preview').innerHTML = renderMarkdown(raw);
+        
+        // Fix relative image paths
+        if (documentBaseUri) {
+            document.querySelectorAll('#preview img').forEach(img => {
+                const src = img.getAttribute('src');
+                if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:') && !src.startsWith('vscode-')) {
+                    img.setAttribute('src', documentBaseUri + '/' + src);
+                }
+            });
+        }
         
         _inlineAddLineAttributes(raw.split('\\n'));
     </script>
