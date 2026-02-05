@@ -32,11 +32,15 @@
     --toolbar-border: #3c3c3c;
 }
 
-/* ===== Highlight - Strong Override ===== */
+/* ===== Highlight - Respects inline styles ===== */
+/* Default yellow for markdown ==text== syntax (no inline style) */
+mark:not([style]) {
+    background-color: #ffff00;
+    color: #000000;
+}
+
+/* Base mark styling */
 mark {
-    background-color: #ffff00 !important;
-    color: #000000 !important;
-    /* Force Black text for contrast */
     padding: 0.1em 0.2em;
     border-radius: 2px;
     box-shadow: 0 0 2px rgba(0, 0, 0, 0.1);

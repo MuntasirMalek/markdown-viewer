@@ -12,27 +12,106 @@ document.addEventListener('mouseup', event => {
         toolbar.style.left = `${rect.left}px`;
         toolbar.classList.add('visible');
 
-        toolbar.dataset.selectedText = selection.toString();
+        const selectedText = selection.toString();
+        toolbar.dataset.selectedText = selectedText;
+
+        // Find the parent block element using closest() - much more reliable
+        // Start from an element node, not a text node
+        const startElem = range.startContainer.nodeType === 1
+            ? range.startContainer
+            : range.startContainer.parentElement;
+
+        // Find the closest block-level parent (li, p, td, h1-h6)
+        const blockElement = startElem?.closest('li, p, td, th, h1, h2, h3, h4, h5, h6');
+        const blockContext = blockElement?.textContent || '';
+
+        // Find the closest element with a data-line attribute
+        const lineElement = startElem?.closest('[data-line]');
+        const lineNumber = lineElement ? parseInt(lineElement.getAttribute('data-line'), 10) : -1;
+
+        // Debug: log what we found
+        console.log(`[preview.js] Found: block=${blockElement?.tagName}, context="${blockContext.substring(0, 60)}...", line=${lineNumber}`);
+
+        toolbar.dataset.sourceLine = lineNumber;
+        toolbar.dataset.blockContext = blockContext;
+
+        // SIBLING-BASED APPROACH: Count previous siblings containing the text
+        let textOccurrenceIndex = 0;
+        try {
+            if (selectedText && blockElement) {
+                // Count previous siblings that contain the same text
+                let sibling = blockElement.previousElementSibling;
+                while (sibling) {
+                    const sibText = sibling.textContent || '';
+                    if (sibText.includes(selectedText)) {
+                        textOccurrenceIndex++;
+                    }
+                    sibling = sibling.previousElementSibling;
+                }
+
+                // Also check if we're inside a nested list - go up and check parent's siblings
+                let parent = blockElement.parentElement;
+                while (parent && parent !== document.body) {
+                    const parentTag = parent.tagName?.toLowerCase();
+                    if (parentTag === 'li' || parentTag === 'ul' || parentTag === 'ol') {
+                        let parentSibling = parent.previousElementSibling;
+                        while (parentSibling) {
+                            const psText = parentSibling.textContent || '';
+                            if (psText.includes(selectedText)) {
+                                textOccurrenceIndex++;
+                            }
+                            parentSibling = parentSibling.previousElementSibling;
+                        }
+                    }
+                    parent = parent.parentElement;
+                }
+
+                console.log(`[preview.js] Sibling-based count: ${textOccurrenceIndex} occurrences before this one`);
+            }
+        } catch (err) {
+            console.error('[preview.js] Error counting occurrences:', err);
+            textOccurrenceIndex = 0;
+        }
+
+        toolbar.dataset.blockOccurrenceIndex = textOccurrenceIndex;
+
+        console.log(`[preview.js] Selection: "${selectedText.substring(0, 30)}..." textOccurrenceIndex: ${textOccurrenceIndex} blockContext: "${blockContext.substring(0, 50)}..." line: ${lineNumber}`);
     } else {
         if (!toolbar.contains(event.target)) {
             toolbar.classList.remove('visible');
         }
+
     }
 });
+
+
+
 
 function applyFormat(format) {
     const toolbar = document.getElementById('floatingToolbar');
     const selectedText = toolbar.dataset.selectedText;
+    const sourceLine = parseInt(toolbar.dataset.sourceLine || '-1', 10);
+    const blockContext = toolbar.dataset.blockContext || '';
+    const blockOccurrenceIndex = parseInt(toolbar.dataset.blockOccurrenceIndex || '0', 10);
+
+    // Debug output
+    console.log(`[preview.js applyFormat] sourceLine=${sourceLine}, blockOccurrenceIndex=${blockOccurrenceIndex}, blockContext="${blockContext?.substring(0, 50)}...", selectedText="${selectedText?.substring(0, 30)}..."`);
+
     if (selectedText) {
         vscode.postMessage({
             type: 'applyFormat',
             format: format,
-            selectedText: selectedText
+            selectedText: selectedText,
+            sourceLine: sourceLine,
+            blockContext: blockContext,
+            blockOccurrenceIndex: blockOccurrenceIndex  // Which occurrence of identical blocks
         });
         toolbar.classList.remove('visible');
         window.getSelection().removeAllRanges();
     }
 }
+
+
 
 document.getElementById('boldBtn').onclick = () => applyFormat('bold');
 document.getElementById('highlightBtn').onclick = () => applyFormat('highlight');
