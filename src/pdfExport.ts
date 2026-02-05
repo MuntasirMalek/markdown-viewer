@@ -125,6 +125,10 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
             const inlineMath = [];
             text = text.replace(/\\$\\$([^$]+)\\$\\$/g, (m, math) => { mathBlocks.push(math); return \`%%MATHBLOCK\${mathBlocks.length-1}%%\`; });
             text = text.replace(/\\$([^$\\n]+)\\$/g, (m, math) => { inlineMath.push(math); return \`%%INLINEMATH\${inlineMath.length-1}%%\`; });
+            
+            // Convert ==highlight== to <mark>highlight</mark> BEFORE markdown parsing
+            text = text.replace(/==([^=]+)==/g, '<mark>$1</mark>');
+            
             let html = marked.parse(text);
             html = html.replace(/%%MATHBLOCK(\\d+)%%/g, (m, i) => {
                 try { return katex.renderToString(mathBlocks[parseInt(i)], { displayMode: true, throwOnError: false }); } catch(e) { return m; }

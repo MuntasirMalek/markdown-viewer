@@ -6,7 +6,7 @@ import { exportToPdf } from './pdfExport';
 export function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
     context.subscriptions.push(outputChannel);
-    outputChannel.appendLine('Extension Activation Started (v2.0.0 - STABLE).');
+    outputChannel.appendLine('Extension Activation Started (v1.0.55 - RESTORED v1.0.51).');
 
     // Status Bar Item for Sync Health
     const syncStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -62,7 +62,7 @@ export function activate(context: vscode.ExtensionContext) {
             // 1. TIMESTAMP GATE (THE GUARD)
             // If the preview scrolled the editor recently (< 1000ms), STOP.
             // This prevents the loop/jitter.
-            if (Date.now() - PreviewPanel.lastRemoteScrollTime < 1000) {
+            if (Date.now() - PreviewPanel.lastRemoteScrollTime < 300) {
                 return;
             }
 
