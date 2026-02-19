@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2025-02-20
+
+### Fixed
+- **Duplicate Text Highlight**: Toggling highlights on duplicate text (e.g. repeated options ক/খ/গ) now correctly targets the selected instance using a global occurrence index calculated from the DOM selection position.
+- **Scroll Jump on Format**: Formatting actions (bold, highlight, delete) no longer cause the preview to jump. Uses incremental content updates via `postMessage` instead of full HTML replacement, plus a 1s formatting gate.
+- **Editor→Preview Scroll Sync**: Fixed critical bug where `_inlineAddLineAttributes` received the entire document as a single string instead of split lines (template literal escaping issue). Also added `endLine`-based bottom detection and proportional extrapolation for accurate scroll mapping.
+
 ## [2.0.0] - 2024-01-26
 
 ### Major Release
