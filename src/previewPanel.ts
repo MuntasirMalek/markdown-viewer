@@ -16,6 +16,7 @@ export class PreviewPanel {
     public _currentDocument: vscode.TextDocument | undefined;
     private _disposables: vscode.Disposable[] = [];
     private _lastScrollTime = 0;
+    public static lastFormatTime = 0;
 
     public static get currentDocument(): vscode.TextDocument | undefined {
         return PreviewPanel.currentPanel ? PreviewPanel.currentPanel._currentDocument : undefined;
@@ -53,18 +54,19 @@ export class PreviewPanel {
         if (PreviewPanel.currentPanel) {
             // Always update for the current document (that's the whole point of live preview!)
             if (PreviewPanel.currentPanel._currentDocument?.uri.toString() === document.uri.toString()) {
-                PreviewPanel.currentPanel._update();
+                // Use incremental update to preserve scroll position
+                PreviewPanel.currentPanel._updateContentOnly();
                 return;
             }
-            // Only switch documents if different
+            // Only switch documents if different - needs full HTML replacement
             PreviewPanel.currentPanel._currentDocument = document;
             PreviewPanel.currentPanel._update();
         }
     }
 
-    public static syncScroll(line: number, totalLines?: number) {
+    public static syncScroll(line: number, totalLines?: number, endLine?: number) {
         if (PreviewPanel.currentPanel) {
-            PreviewPanel.currentPanel._panel.webview.postMessage({ type: 'scrollTo', line: line, totalLines: totalLines })
+            PreviewPanel.currentPanel._panel.webview.postMessage({ type: 'scrollTo', line: line, totalLines: totalLines, endLine: endLine })
                 .then(success => { });
         }
     }
@@ -91,7 +93,7 @@ export class PreviewPanel {
                         vscode.window.showErrorMessage(`Preview Error: ${message.text}`);
                         return;
                     case 'applyFormat':
-                        this._applyFormat(message.format, message.selectedText, message.sourceLine, message.blockContext || '', message.blockOccurrenceIndex || 0);
+                        this._applyFormat(message.format, message.selectedText, message.sourceLine, message.blockContext || '', message.blockOccurrenceIndex || 0, message.globalOccurrenceIndex ?? -1);
                         return;
                     case 'exportPdf':
                         if (this._currentDocument) {
@@ -101,6 +103,8 @@ export class PreviewPanel {
                         }
                         return;
                     case 'revealLine':
+                        // Skip during formatting to prevent scroll jumps
+                        if (Date.now() - PreviewPanel.lastFormatTime < 1000) return;
                         if (Date.now() - this._lastScrollTime > 50) {
                             this._revealLineInEditor(message.line);
                             this._lastScrollTime = Date.now();
@@ -158,7 +162,7 @@ export class PreviewPanel {
         }
     }
 
-    private _applyFormat(format: string, selectedText: string, sourceLine: number = -1, blockContext: string = '', blockOccurrenceIndex: number = 0) {
+    private _applyFormat(format: string, selectedText: string, sourceLine: number = -1, blockContext: string = '', blockOccurrenceIndex: number = 0, globalOccurrenceIndex: number = -1) {
         if (!this._currentDocument) {
             vscode.window.showWarningMessage('No active document found.');
             return;
@@ -259,6 +263,11 @@ export class PreviewPanel {
         }
 
         console.log(`[applyFormat] Found ${allOccurrences.length} total occurrences of "${selectedText.substring(0, 20)}..."`);
+
+        // Sort by document order (line, then character position) to match preview text order.
+        // Without this, wrapped occurrences could appear before plain ones on the same line.
+        allOccurrences.sort((a, b) => a.line !== b.line ? a.line - b.line : a.charStart - b.charStart);
+
         allOccurrences.forEach((occ, idx) => {
             console.log(`[applyFormat]   Occurrence ${idx}: line ${occ.line}, char ${occ.charStart}, wrapped=${occ.isWrapped || 'none'}`);
         });
@@ -267,18 +276,47 @@ export class PreviewPanel {
         if (allOccurrences.length > 0) {
             let matchedOccurrence: TextOccurrence | null = null;
 
+            // PRIORITY 0 (HIGHEST): Use globalOccurrenceIndex if available
+            // This is calculated from the selection's position in the preview DOM
+            // and directly maps to the Nth occurrence in document order
+            if (globalOccurrenceIndex >= 0 && globalOccurrenceIndex < allOccurrences.length) {
+                matchedOccurrence = allOccurrences[globalOccurrenceIndex];
+                console.log(`[applyFormat] Matched by globalOccurrenceIndex ${globalOccurrenceIndex} on line ${matchedOccurrence.line}`);
+            }
+
             // PRIORITY 1: Use blockContext to find the matching line
             // Each list item has unique labels (ক, খ, গ), so we match by full block text
             if (blockContext && blockContext.length > 5) {
                 const normalizedBlockContext = blockContext.replace(/\s+/g, '').toLowerCase();
+                // Collect ALL blockContext matches first
+                const blockContextMatches: TextOccurrence[] = [];
                 for (const occ of allOccurrences) {
                     const lineText = document.lineAt(occ.line).text;
                     const normalizedLine = lineText.replace(/\s+/g, '').toLowerCase();
                     // Check if line contains key parts of block context (excluding common text)
                     if (normalizedBlockContext.includes(normalizedLine) || normalizedLine.includes(normalizedBlockContext.substring(0, 20))) {
-                        matchedOccurrence = occ;
-                        console.log(`[applyFormat] Matched by blockContext on line ${occ.line}`);
-                        break;
+                        blockContextMatches.push(occ);
+                    }
+                }
+                // Only use blockContext if it uniquely identifies ONE occurrence
+                if (blockContextMatches.length === 1) {
+                    matchedOccurrence = blockContextMatches[0];
+                    console.log(`[applyFormat] Matched uniquely by blockContext on line ${matchedOccurrence.line}`);
+                } else if (blockContextMatches.length > 1) {
+                    console.log(`[applyFormat] blockContext matched ${blockContextMatches.length} occurrences, disambiguating...`);
+                    // Multiple matches — try to use sourceLine to disambiguate within them
+                    if (sourceLine >= 0) {
+                        const sourceMatch = blockContextMatches.find(occ => occ.line === sourceLine);
+                        if (sourceMatch) {
+                            matchedOccurrence = sourceMatch;
+                            console.log(`[applyFormat] Disambiguated by sourceLine ${sourceLine} among ${blockContextMatches.length} blockContext matches`);
+                        }
+                    }
+                    // If sourceLine didn't help, use blockOccurrenceIndex within blockContextMatches
+                    if (!matchedOccurrence) {
+                        const targetIdx = Math.min(blockOccurrenceIndex, blockContextMatches.length - 1);
+                        matchedOccurrence = blockContextMatches[targetIdx];
+                        console.log(`[applyFormat] Used blockOccurrenceIndex ${targetIdx} among ${blockContextMatches.length} blockContext matches`);
                     }
                 }
             }
@@ -339,6 +377,10 @@ export class PreviewPanel {
             console.log(`[applyFormat] isWrappedWith('${marker}'): bounds check failed`);
             return false;
         };
+
+        // Suppress scroll sync during formatting to prevent jumps
+        PreviewPanel.lastFormatTime = Date.now();
+        PreviewPanel.lastRemoteScrollTime = Date.now();
 
         // Check for ANY existing formatting and strip it when applying same format
         // Also prevent nesting same format
@@ -444,6 +486,14 @@ export class PreviewPanel {
     private _update() {
         this._panel.title = this._currentDocument ? `Preview: ${path.basename(this._currentDocument.fileName)}` : 'Markdown Preview';
         this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
+    }
+
+    // Incremental update: sends content via postMessage to avoid full HTML replacement.
+    // This preserves the webview DOM and scroll position perfectly.
+    private _updateContentOnly() {
+        if (!this._currentDocument) return;
+        const content = this._currentDocument.getText();
+        this._panel.webview.postMessage({ type: 'updateContent', content: content });
     }
 
     private _getHtmlForWebview(webview: vscode.Webview): string {
@@ -562,7 +612,8 @@ export class PreviewPanel {
             if (message.type === 'scrollTo') {
                 const line = message.line;
                 const totalLines = message.totalLines || 1;
-                const newTargetY = calculateTargetY(line, totalLines);
+                const endLine = message.endLine || line;
+                const newTargetY = calculateTargetY(line, totalLines, endLine);
                 
                 if (!isNaN(newTargetY) && previewEl) {
                     lastEditorScrollTime = Date.now();
@@ -571,13 +622,14 @@ export class PreviewPanel {
             }
         });
 
-        function calculateTargetY(line, totalLines) {
+        function calculateTargetY(line, totalLines, endLine) {
             const viewHeight = previewEl ? previewEl.clientHeight : window.innerHeight;
             const scrollHeight = previewEl ? previewEl.scrollHeight : document.body.scrollHeight;
             const halfView = viewHeight / 2;
             
-            // Edge case: near end of document
-            if (totalLines && line >= totalLines - 3) {
+            // Edge case: near end of document (use endLine for accurate bottom detection)
+            const effectiveEnd = endLine || line;
+            if (totalLines && effectiveEnd >= totalLines - 5) {
                 return scrollHeight - viewHeight;  // Scroll to bottom
             }
             
@@ -612,7 +664,16 @@ export class PreviewPanel {
                     const ratio = (line - before.line) / (after.line - before.line);
                     target = before.top + (after.top - before.top) * ratio - halfView;
                 } else if (before) {
-                    target = before.top - halfView;
+                    // Line is BEYOND the last known data-line element.
+                    // Use proportional extrapolation from the last element to the end.
+                    const lastLine = sorted[sorted.length - 1];
+                    if (totalLines && lastLine.line < totalLines) {
+                        const remainingRatio = (line - lastLine.line) / (totalLines - lastLine.line);
+                        const remainingScroll = scrollHeight - lastLine.top;
+                        target = lastLine.top + remainingScroll * remainingRatio - halfView;
+                    } else {
+                        target = before.top - halfView;
+                    }
                 }
                 return Math.max(0, Math.min(target, scrollHeight - viewHeight));
             }
@@ -652,7 +713,53 @@ export class PreviewPanel {
                 toolbar.dataset.blockContext = blockContext;
                 toolbar.dataset.sourceLine = lineNumber;
                 
-                console.log('[webview] Selection: block=' + (blockElement ? blockElement.tagName : 'null') + ', context="' + blockContext.substring(0, 50) + '...", line=' + lineNumber);
+                // GLOBAL OCCURRENCE INDEX: Count which occurrence of selectedText
+                // this is across the ENTIRE preview DOM. This works even when
+                // duplicate lines are inside a single <p> (breaks: true).
+                let globalOccIdx = 0;
+                try {
+                    const previewRoot = document.getElementById('preview');
+                    if (previewRoot && selectedText) {
+                        // Create a range from start of preview to start of selection
+                        const preRange = document.createRange();
+                        preRange.setStart(previewRoot, 0);
+                        preRange.setEnd(range.startContainer, range.startOffset);
+                        const textBeforeSelection = preRange.toString();
+                        
+                        // Count how many times selectedText appears before our selection
+                        let searchFrom = 0;
+                        while (true) {
+                            const idx = textBeforeSelection.indexOf(selectedText, searchFrom);
+                            if (idx === -1) break;
+                            globalOccIdx++;
+                            searchFrom = idx + selectedText.length;
+                        }
+                    }
+                } catch (err) {
+                    console.error('[webview] Error calculating globalOccurrenceIndex:', err);
+                    globalOccIdx = 0;
+                }
+                toolbar.dataset.globalOccurrenceIndex = globalOccIdx;
+                
+                // Also keep sibling-based counting as fallback
+                let textOccurrenceIndex = 0;
+                try {
+                    if (selectedText && blockElement) {
+                        let sibling = blockElement.previousElementSibling;
+                        while (sibling) {
+                            const sibText = sibling.textContent || '';
+                            if (sibText.includes(selectedText)) {
+                                textOccurrenceIndex++;
+                            }
+                            sibling = sibling.previousElementSibling;
+                        }
+                    }
+                } catch (err) {
+                    textOccurrenceIndex = 0;
+                }
+                toolbar.dataset.blockOccurrenceIndex = textOccurrenceIndex;
+                
+                console.log('[webview] Selection: block=' + (blockElement ? blockElement.tagName : 'null') + ', context="' + blockContext.substring(0, 50) + '...", line=' + lineNumber + ', globalOccIdx=' + globalOccIdx + ', siblingIdx=' + textOccurrenceIndex);
             } else {
                 if (!toolbar.contains(event.target)) toolbar.classList.remove('visible');
             }
@@ -663,6 +770,8 @@ export class PreviewPanel {
             const selectedText = toolbar.dataset.selectedText || '';
             const blockContext = toolbar.dataset.blockContext || '';
             const sourceLine = parseInt(toolbar.dataset.sourceLine || '-1', 10);
+            const blockOccurrenceIndex = parseInt(toolbar.dataset.blockOccurrenceIndex || '0', 10);
+            const globalOccurrenceIndex = parseInt(toolbar.dataset.globalOccurrenceIndex || '-1', 10);
             
             if (selectedText) {
                 vscode.postMessage({ 
@@ -670,7 +779,9 @@ export class PreviewPanel {
                     format: format, 
                     selectedText: selectedText,
                     blockContext: blockContext,
-                    sourceLine: sourceLine
+                    sourceLine: sourceLine,
+                    blockOccurrenceIndex: blockOccurrenceIndex,
+                    globalOccurrenceIndex: globalOccurrenceIndex
                 });
                 toolbar.classList.remove('visible');
                 window.getSelection().removeAllRanges();
@@ -916,7 +1027,36 @@ export class PreviewPanel {
             });
         }
         
-        _inlineAddLineAttributes(raw.split('\\n'));
+        _inlineAddLineAttributes(raw.split(new RegExp('\\n')));
+        
+        // Handle incremental content updates (preserves scroll position)
+        window.addEventListener('message', function(event) {
+            const message = event.data;
+            if (message.type === 'updateContent') {
+                // Suppress scroll echo during re-render
+                lastEditorScrollTime = Date.now();
+                
+                const newRaw = message.content;
+                document.getElementById('preview').innerHTML = renderMarkdown(newRaw);
+                
+                // Fix relative image paths
+                if (documentBaseUri) {
+                    document.querySelectorAll('#preview img').forEach(function(img) {
+                        const src = img.getAttribute('src');
+                        if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:') && !src.startsWith('vscode-')) {
+                            img.setAttribute('src', documentBaseUri + '/' + src);
+                        }
+                    });
+                }
+                
+                _inlineAddLineAttributes(newRaw.split(new RegExp('\\n')));
+                
+                // Save scroll state
+                if (previewEl) {
+                    vscode.setState({ scrollTop: previewEl.scrollTop });
+                }
+            }
+        });
     </script>
 </body>
 </html>`;

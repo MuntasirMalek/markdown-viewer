@@ -6,7 +6,7 @@ import { exportToPdf } from './pdfExport';
 export function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
     context.subscriptions.push(outputChannel);
-    outputChannel.appendLine('Extension Activation Started (v1.0.55 - RESTORED v1.0.51).');
+    outputChannel.appendLine('Extension Activation Started (v3.1.0).');
 
     // Status Bar Item for Sync Health
     const syncStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -59,17 +59,15 @@ export function activate(context: vscode.ExtensionContext) {
     const scrollListener = vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
         if (event.textEditor.document.languageId === 'markdown') {
 
-            // 1. TIMESTAMP GATE (THE GUARD)
-            // If the preview scrolled the editor recently (< 1000ms), STOP.
-            // This prevents the loop/jitter.
+            // 1. TIMESTAMP GATE: Skip if preview scrolled the editor recently
             if (Date.now() - PreviewPanel.lastRemoteScrollTime < 500) {
                 return;
             }
 
-            // 2. NUCLEAR OPTION (NO PATH CHECKS)
-            // We removed the path checks because they were failing for your specific file.
-            // Since we have the Timestamp Gate, we don't need to worry about loops.
-            // And honestly, if you scroll *any* markdown file, you probably want the preview to sync.
+            // 2. FORMATTING GATE: Skip during formatting operations
+            if (Date.now() - PreviewPanel.lastFormatTime < 1000) {
+                return;
+            }
 
             // 3. THROTTLE
             const now = Date.now();
@@ -80,7 +78,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             const visibleRange = event.visibleRanges[0];
             if (visibleRange) {
-                PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount);
+                PreviewPanel.syncScroll(visibleRange.start.line, event.textEditor.document.lineCount, visibleRange.end.line);
             }
         }
     });
