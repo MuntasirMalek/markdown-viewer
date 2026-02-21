@@ -92,9 +92,7 @@ export class PreviewPanel {
                     case 'error':
                         vscode.window.showErrorMessage(`Preview Error: ${message.text}`);
                         return;
-                    case 'deleteLines':
-                        this._deleteLines(message.lines);
-                        break;
+
                     case 'applyFormat':
                         this._applyFormat(message.format, message.selectedText, message.sourceLine, message.blockContext || '', message.blockOccurrenceIndex || 0, message.globalOccurrenceIndex ?? -1);
                         return;
@@ -165,34 +163,6 @@ export class PreviewPanel {
         }
     }
 
-    private _deleteLines(lines: number[]) {
-        if (!this._currentDocument || !lines || lines.length === 0) return;
-        const editor = vscode.window.visibleTextEditors.find(
-            e => e.document.uri.toString() === this._currentDocument?.uri.toString()
-        );
-        if (!editor) return;
-        const document = editor.document;
-        const docLineCount = document.lineCount;
-
-        // Suppress scroll sync during editing
-        PreviewPanel.lastFormatTime = Date.now();
-        PreviewPanel.lastRemoteScrollTime = Date.now();
-
-        // Deduplicate, filter valid, and sort in REVERSE order
-        // (delete from bottom to top so line numbers stay valid)
-        const uniqueLines = [...new Set(lines)]
-            .filter(l => l >= 0 && l < docLineCount)
-            .sort((a, b) => b - a);
-
-        if (uniqueLines.length === 0) return;
-
-        editor.edit(editBuilder => {
-            for (const lineNum of uniqueLines) {
-                const lineRange = document.lineAt(lineNum).rangeIncludingLineBreak;
-                editBuilder.delete(lineRange);
-            }
-        });
-    }
 
     private _applyFormat(format: string, selectedText: string, sourceLine: number = -1, blockContext: string = '', blockOccurrenceIndex: number = 0, globalOccurrenceIndex: number = -1) {
         if (!this._currentDocument) {
@@ -383,86 +353,76 @@ export class PreviewPanel {
                 return;
             }
 
-            // FALLBACK for delete: use sourceLine + markdown-stripped matching
-            // This handles cases where selectedText is rendered (plain) but source has markdown formatting
-            if (format === 'delete' && sourceLine >= 0 && sourceLine < document.lineCount) {
-                // Strip markdown from a source line for comparison
-                const stripMarkdown = (text: string): string => {
+            // FALLBACK for delete: normalized text matching across ENTIRE document
+            if (format === 'delete') {
+                const stripMd = (text: string): string => {
                     return text
-                        .replace(/^[\s]*[-*+]\s+/, '')  // Remove list markers
-                        .replace(/^[\s]*\d+\.\s+/, '')   // Remove numbered list markers
-                        .replace(/^#{1,6}\s+/, '')       // Remove heading markers
-                        .replace(/\*\*/g, '')             // Remove bold
-                        .replace(/\*/g, '')               // Remove italic
-                        .replace(/==/g, '')               // Remove highlight
-                        .replace(/::/g, '')               // Remove red highlight
-                        .replace(/~~(.*?)~~/g, '$1')     // Remove strikethrough
-                        .replace(/`([^`]+)`/g, '$1')     // Remove inline code
-                        .replace(/\$([^$]+)\$/g, '$1')   // Remove inline math
-                        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // Remove links
-                        .replace(/<mark[^>]*>/g, '').replace(/<\/mark>/g, '') // Remove mark tags
-                        .replace(/<[^>]+>/g, '')         // Remove any remaining HTML tags
+                        .replace(/^[\s]*[-*+]\s+/g, '')
+                        .replace(/^[\s]*\d+\.\s+/g, '')
+                        .replace(/^#{1,6}\s+/, '')
+                        .replace(/\*\*/g, '')
+                        .replace(/\*/g, '')
+                        .replace(/==/g, '')
+                        .replace(/::/g, '')
+                        .replace(/~~(.*?)~~/g, '$1')
+                        .replace(/`([^`]+)`/g, '$1')
+                        .replace(/\$\$[^$]*\$\$/g, '')
+                        .replace(/\$([^$\n]+)\$/g, '$1')
+                        .replace(/\^(\d+)/g, '$1')
+                        .replace(/_(\{[^}]*\}|\w)/g, '$1')
+                        .replace(/[{}]/g, '')
+                        .replace(/\\[a-zA-Z]+/g, '')
+                        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+                        .replace(/<mark[^>]*>/g, '').replace(/<\/mark>/g, '')
+                        .replace(/<br\s*\/?>/g, ' ')
+                        .replace(/<[^>]+>/g, '')
+                        .replace(/\s+/g, ' ')
                         .trim();
                 };
 
-                // Split selected text by newlines to handle multi-line selections
-                const selectedParts = selectedText.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+                const selectedParts = selectedText.split('\n')
+                    .map(s => s.replace(/\s+/g, ' ').trim())
+                    .filter(s => s.length > 2);
 
-                if (selectedParts.length === 1) {
-                    // Single line: find which source line near sourceLine contains this text
-                    const searchRadius = 10;
-                    const startSearch = Math.max(0, sourceLine - searchRadius);
-                    const endSearch = Math.min(document.lineCount, sourceLine + searchRadius);
+                if (selectedParts.length === 0) {
+                    vscode.window.showWarningMessage('No meaningful text selected.');
+                    return;
+                }
 
-                    for (let i = startSearch; i < endSearch; i++) {
-                        const srcLine = document.lineAt(i).text;
-                        const stripped = stripMarkdown(srcLine);
-                        if (stripped.includes(selectedParts[0]) || selectedParts[0].includes(stripped)) {
-                            // Found the line — delete entire line
-                            const deleteRange = document.lineAt(i).rangeIncludingLineBreak;
-                            editor.edit(editBuilder => editBuilder.delete(deleteRange));
-                            return;
+                PreviewPanel.lastFormatTime = Date.now();
+                PreviewPanel.lastRemoteScrollTime = Date.now();
+
+                const matchedLines: number[] = [];
+                let lastMatchedIdx = -1;
+
+                for (const part of selectedParts) {
+                    const normPart = part.replace(/\s+/g, ' ').trim();
+                    if (normPart.length < 3) continue;
+
+                    for (let i = lastMatchedIdx + 1; i < document.lineCount; i++) {
+                        const srcText = document.lineAt(i).text;
+                        if (srcText.trim().length === 0) continue;
+                        if (matchedLines.includes(i)) continue;
+
+                        const stripped = stripMd(srcText);
+                        if (stripped.length === 0) continue;
+
+                        if (stripped.includes(normPart) || normPart.includes(stripped)) {
+                            matchedLines.push(i);
+                            lastMatchedIdx = i;
+                            break;
                         }
                     }
-                } else {
-                    // Multi-line: find consecutive source lines that match the selected parts
-                    const searchRadius = 10;
-                    const startSearch = Math.max(0, sourceLine - searchRadius);
-                    const endSearch = Math.min(document.lineCount, sourceLine + searchRadius);
+                }
 
-                    for (let i = startSearch; i < endSearch; i++) {
-                        // Check if selectedParts match consecutive source lines starting at i
-                        let allMatch = true;
-                        let matchCount = 0;
-                        let srcIdx = i;
-
-                        for (const part of selectedParts) {
-                            // Skip empty source lines
-                            while (srcIdx < document.lineCount && document.lineAt(srcIdx).text.trim() === '') {
-                                srcIdx++;
-                            }
-                            if (srcIdx >= document.lineCount) { allMatch = false; break; }
-
-                            const stripped = stripMarkdown(document.lineAt(srcIdx).text);
-                            if (stripped.includes(part) || part.includes(stripped)) {
-                                matchCount++;
-                                srcIdx++;
-                            } else {
-                                allMatch = false;
-                                break;
-                            }
+                if (matchedLines.length > 0) {
+                    const sorted = [...matchedLines].sort((a, b) => b - a);
+                    editor.edit(editBuilder => {
+                        for (const lineNum of sorted) {
+                            editBuilder.delete(document.lineAt(lineNum).rangeIncludingLineBreak);
                         }
-
-                        if (allMatch && matchCount === selectedParts.length) {
-                            // Delete from line i to srcIdx (inclusive of line breaks)
-                            const deleteRange = new vscode.Range(
-                                new vscode.Position(i, 0),
-                                new vscode.Position(srcIdx, 0)
-                            );
-                            editor.edit(editBuilder => editBuilder.delete(deleteRange));
-                            return;
-                        }
-                    }
+                    });
+                    return;
                 }
 
                 vscode.window.showWarningMessage('Could not find the selected text in source to delete.');
@@ -911,56 +871,7 @@ export class PreviewPanel {
         document.getElementById('boldBtn').onclick = () => applyToolbarFormat('bold');
         document.getElementById('highlightBtn').onclick = () => applyToolbarFormat('highlight');
         document.getElementById('redHighlightBtn').onclick = () => applyToolbarFormat('red-highlight');
-        document.getElementById('deleteBtn').onclick = () => {
-            // DELETE uses data-line values to identify exactly which source lines to remove
-            const selection = window.getSelection();
-            if (!selection || selection.isCollapsed) return;
-            
-            const range = selection.getRangeAt(0);
-            const previewEl = document.getElementById('preview');
-            if (!previewEl) return;
-            
-            // Get the selection's bounding rect
-            const selRect = range.getBoundingClientRect();
-            if (selRect.height === 0) return;
-            
-            // Find data-line elements that are meaningfully within the selection
-            const allLineEls = Array.from(previewEl.querySelectorAll('[data-line]'));
-            const selectedLines = [];
-            
-            for (const el of allLineEls) {
-                const elRect = el.getBoundingClientRect();
-                if (elRect.height === 0) continue;
-                
-                // Calculate how much of this element overlaps with the selection
-                const overlapTop = Math.max(selRect.top, elRect.top);
-                const overlapBottom = Math.min(selRect.bottom, elRect.bottom);
-                const overlapHeight = overlapBottom - overlapTop;
-                
-                // Require at least 50% of the element to be within selection
-                if (overlapHeight > elRect.height * 0.5) {
-                    selectedLines.push(parseInt(el.getAttribute('data-line'), 10));
-                }
-            }
-            
-            if (selectedLines.length === 0) {
-                // Fallback: try the nearest data-line ancestor of selection start
-                const startElem = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
-                const lineEl = startElem ? startElem.closest('[data-line]') : null;
-                if (lineEl) {
-                    selectedLines.push(parseInt(lineEl.getAttribute('data-line'), 10));
-                }
-            }
-            
-            if (selectedLines.length > 0) {
-                vscode.postMessage({
-                    type: 'deleteLines',
-                    lines: selectedLines
-                });
-                document.getElementById('floatingToolbar').classList.remove('visible');
-                selection.removeAllRanges();
-            }
-        };
+        document.getElementById('deleteBtn').onclick = () => applyToolbarFormat('delete');
         document.querySelector('.fab-export').onclick = () => exportPdf();
         
         // ========== KEYBOARD SHORTCUTS (UNDO/REDO) ==========
