@@ -92,6 +92,9 @@ export class PreviewPanel {
                     case 'error':
                         vscode.window.showErrorMessage(`Preview Error: ${message.text}`);
                         return;
+                    case 'deleteLines':
+                        this._deleteLines(message.startLine, message.endLine);
+                        break;
                     case 'applyFormat':
                         this._applyFormat(message.format, message.selectedText, message.sourceLine, message.blockContext || '', message.blockOccurrenceIndex || 0, message.globalOccurrenceIndex ?? -1);
                         return;
@@ -160,6 +163,50 @@ export class PreviewPanel {
                 disposable.dispose();
             }
         }
+    }
+
+    private _deleteLines(startLine: number, endLine: number) {
+        if (!this._currentDocument) return;
+        const editor = vscode.window.visibleTextEditors.find(
+            e => e.document.uri.toString() === this._currentDocument?.uri.toString()
+        );
+        if (!editor) return;
+        const document = editor.document;
+
+        // Clamp to valid range
+        const docLineCount = document.lineCount;
+        const safeStart = Math.max(0, Math.min(startLine, docLineCount - 1));
+
+        // endLine is the last data-line found; we need to find where its content ends
+        // Look forward from endLine until we hit the next data-line marker or end of doc
+        // For simplicity, find the next non-empty line that would start a new block
+        let safeEnd = Math.max(safeStart, Math.min(endLine, docLineCount - 1));
+
+        // Extend to cover the full content block of the last data-line element
+        // Keep going until we hit an empty line followed by content, or another heading/list marker
+        for (let i = safeEnd + 1; i < docLineCount; i++) {
+            const lineText = document.lineAt(i).text;
+            if (lineText.trim() === '') {
+                safeEnd = i; // Include the trailing blank line
+                break;
+            }
+            // If this looks like a new block element, stop before it
+            if (/^(#{1,6}\s|[-*+]\s|\d+\.\s|\|)/.test(lineText.trim()) && i > endLine) {
+                break;
+            }
+            safeEnd = i; // This line is continuation of the current block
+        }
+
+        // Suppress scroll sync during editing
+        PreviewPanel.lastFormatTime = Date.now();
+        PreviewPanel.lastRemoteScrollTime = Date.now();
+
+        const deleteRange = new vscode.Range(
+            new vscode.Position(safeStart, 0),
+            new vscode.Position(Math.min(safeEnd + 1, docLineCount - 1),
+                safeEnd + 1 < docLineCount ? 0 : document.lineAt(docLineCount - 1).text.length)
+        );
+        editor.edit(editBuilder => editBuilder.delete(deleteRange));
     }
 
     private _applyFormat(format: string, selectedText: string, sourceLine: number = -1, blockContext: string = '', blockOccurrenceIndex: number = 0, globalOccurrenceIndex: number = -1) {
@@ -879,7 +926,48 @@ export class PreviewPanel {
         document.getElementById('boldBtn').onclick = () => applyToolbarFormat('bold');
         document.getElementById('highlightBtn').onclick = () => applyToolbarFormat('highlight');
         document.getElementById('redHighlightBtn').onclick = () => applyToolbarFormat('red-highlight');
-        document.getElementById('deleteBtn').onclick = () => applyToolbarFormat('delete');
+        document.getElementById('deleteBtn').onclick = () => {
+            // DELETE uses data-line based approach instead of text matching
+            // This avoids issues with KaTeX-rendered math and markdown formatting
+            const selection = window.getSelection();
+            if (!selection || selection.isCollapsed) return;
+            
+            const range = selection.getRangeAt(0);
+            const previewEl = document.getElementById('preview');
+            if (!previewEl) return;
+            
+            // Find all data-line elements that overlap with the selection
+            const allLineEls = Array.from(previewEl.querySelectorAll('[data-line]'));
+            const linesInSelection = [];
+            
+            for (const el of allLineEls) {
+                // Check if this element is within or overlaps the selection
+                if (selection.containsNode(el, true)) {
+                    linesInSelection.push(parseInt(el.getAttribute('data-line'), 10));
+                }
+            }
+            
+            if (linesInSelection.length === 0) {
+                // Fallback: try the nearest data-line ancestor
+                const startElem = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+                const lineEl = startElem ? startElem.closest('[data-line]') : null;
+                if (lineEl) {
+                    linesInSelection.push(parseInt(lineEl.getAttribute('data-line'), 10));
+                }
+            }
+            
+            if (linesInSelection.length > 0) {
+                const startLine = Math.min(...linesInSelection);
+                const endLine = Math.max(...linesInSelection);
+                vscode.postMessage({
+                    type: 'deleteLines',
+                    startLine: startLine,
+                    endLine: endLine
+                });
+                document.getElementById('floatingToolbar').classList.remove('visible');
+                selection.removeAllRanges();
+            }
+        };
         document.querySelector('.fab-export').onclick = () => exportPdf();
         
         // ========== KEYBOARD SHORTCUTS (UNDO/REDO) ==========
