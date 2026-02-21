@@ -350,6 +350,93 @@ export class PreviewPanel {
                 exportToPdf(this._extensionUri, document);
                 return;
             }
+
+            // FALLBACK for delete: use sourceLine + markdown-stripped matching
+            // This handles cases where selectedText is rendered (plain) but source has markdown formatting
+            if (format === 'delete' && sourceLine >= 0 && sourceLine < document.lineCount) {
+                // Strip markdown from a source line for comparison
+                const stripMarkdown = (text: string): string => {
+                    return text
+                        .replace(/^[\s]*[-*+]\s+/, '')  // Remove list markers
+                        .replace(/^[\s]*\d+\.\s+/, '')   // Remove numbered list markers
+                        .replace(/^#{1,6}\s+/, '')       // Remove heading markers
+                        .replace(/\*\*/g, '')             // Remove bold
+                        .replace(/\*/g, '')               // Remove italic
+                        .replace(/==/g, '')               // Remove highlight
+                        .replace(/::/g, '')               // Remove red highlight
+                        .replace(/~~(.*?)~~/g, '$1')     // Remove strikethrough
+                        .replace(/`([^`]+)`/g, '$1')     // Remove inline code
+                        .replace(/\$([^$]+)\$/g, '$1')   // Remove inline math
+                        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // Remove links
+                        .replace(/<mark[^>]*>/g, '').replace(/<\/mark>/g, '') // Remove mark tags
+                        .replace(/<[^>]+>/g, '')         // Remove any remaining HTML tags
+                        .trim();
+                };
+
+                // Split selected text by newlines to handle multi-line selections
+                const selectedParts = selectedText.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+
+                if (selectedParts.length === 1) {
+                    // Single line: find which source line near sourceLine contains this text
+                    const searchRadius = 10;
+                    const startSearch = Math.max(0, sourceLine - searchRadius);
+                    const endSearch = Math.min(document.lineCount, sourceLine + searchRadius);
+
+                    for (let i = startSearch; i < endSearch; i++) {
+                        const srcLine = document.lineAt(i).text;
+                        const stripped = stripMarkdown(srcLine);
+                        if (stripped.includes(selectedParts[0]) || selectedParts[0].includes(stripped)) {
+                            // Found the line — delete entire line
+                            const deleteRange = document.lineAt(i).rangeIncludingLineBreak;
+                            editor.edit(editBuilder => editBuilder.delete(deleteRange));
+                            return;
+                        }
+                    }
+                } else {
+                    // Multi-line: find consecutive source lines that match the selected parts
+                    const searchRadius = 10;
+                    const startSearch = Math.max(0, sourceLine - searchRadius);
+                    const endSearch = Math.min(document.lineCount, sourceLine + searchRadius);
+
+                    for (let i = startSearch; i < endSearch; i++) {
+                        // Check if selectedParts match consecutive source lines starting at i
+                        let allMatch = true;
+                        let matchCount = 0;
+                        let srcIdx = i;
+
+                        for (const part of selectedParts) {
+                            // Skip empty source lines
+                            while (srcIdx < document.lineCount && document.lineAt(srcIdx).text.trim() === '') {
+                                srcIdx++;
+                            }
+                            if (srcIdx >= document.lineCount) { allMatch = false; break; }
+
+                            const stripped = stripMarkdown(document.lineAt(srcIdx).text);
+                            if (stripped.includes(part) || part.includes(stripped)) {
+                                matchCount++;
+                                srcIdx++;
+                            } else {
+                                allMatch = false;
+                                break;
+                            }
+                        }
+
+                        if (allMatch && matchCount === selectedParts.length) {
+                            // Delete from line i to srcIdx (inclusive of line breaks)
+                            const deleteRange = new vscode.Range(
+                                new vscode.Position(i, 0),
+                                new vscode.Position(srcIdx, 0)
+                            );
+                            editor.edit(editBuilder => editBuilder.delete(deleteRange));
+                            return;
+                        }
+                    }
+                }
+
+                vscode.window.showWarningMessage('Could not find the selected text in source to delete.');
+                return;
+            }
+
             vscode.window.showWarningMessage('Selected text not found in source.');
             return;
         }
