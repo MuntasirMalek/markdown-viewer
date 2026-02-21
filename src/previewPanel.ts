@@ -545,7 +545,18 @@ export class PreviewPanel {
             }
         }
 
-        // Preview scroll handler - syncs preview scrolling back to editor
+        // ========== HELPER: Get sorted data-line elements ==========
+        function getSortedLineElements() {
+            const elements = Array.from(document.querySelectorAll('[data-line]'));
+            return elements.map(el => ({
+                el: el,
+                line: parseInt(el.getAttribute('data-line')),
+                top: el.offsetTop,
+                height: el.offsetHeight
+            })).sort((a, b) => a.line - b.line);
+        }
+
+        // ========== PREVIEW→EDITOR SCROLL SYNC ==========
         function handlePreviewScroll(e) {
             saveScrollPosition();
             
@@ -554,51 +565,56 @@ export class PreviewPanel {
                 return;
             }
             
-            // Debounce: only sync after scroll stops for 100ms
+            // Debounce: only sync after user pauses for 80ms
             if (scrollDebounceTimer) clearTimeout(scrollDebounceTimer);
             scrollDebounceTimer = setTimeout(() => {
                 // Throttle: don't send too frequently
-                if (Date.now() - lastPreviewScrollTime < 100) return;
+                if (Date.now() - lastPreviewScrollTime < 80) return;
                 lastPreviewScrollTime = Date.now();
 
-                const elements = document.querySelectorAll('[data-line]');
-                if (elements.length === 0) return;
+                const sorted = getSortedLineElements();
+                if (sorted.length === 0) return;
 
                 const scrollTop = previewEl.scrollTop;
                 const viewHeight = previewEl.clientHeight;
                 const scrollHeight = previewEl.scrollHeight;
                 
-                // Edge case: at bottom
-                if (scrollTop + viewHeight >= scrollHeight - 10) {
-                    const lastEl = elements[elements.length - 1];
-                    const lastLine = parseInt(lastEl.getAttribute('data-line')) || 0;
-                    vscode.postMessage({ type: 'revealLine', line: lastLine });
-                    return;
-                }
-                
                 // Edge case: at top
-                if (scrollTop <= 10) {
+                if (scrollTop <= 5) {
                     vscode.postMessage({ type: 'revealLine', line: 0 });
                     return;
                 }
                 
-                // Normal case: find element at center of view
+                // Edge case: at bottom
+                if (scrollTop + viewHeight >= scrollHeight - 5) {
+                    vscode.postMessage({ type: 'revealLine', line: sorted[sorted.length - 1].line });
+                    return;
+                }
+                
+                // Find the element at viewport center and interpolate
                 const centerY = scrollTop + (viewHeight / 2);
-                let bestLine = -1;
-                let minDist = Infinity;
-
-                for (const el of elements) {
-                    const elTop = el.offsetTop;
-                    const dist = Math.abs(elTop - centerY);
-                    if (dist < minDist) {
-                        minDist = dist;
-                        bestLine = parseInt(el.getAttribute('data-line'));
-                    }
+                
+                let before = null, after = null;
+                for (const item of sorted) {
+                    if (item.top <= centerY) before = item;
+                    else { after = item; break; }
                 }
-                if (bestLine >= 0) {
-                    vscode.postMessage({ type: 'revealLine', line: bestLine });
+                
+                let targetLine = 0;
+                if (before && after) {
+                    // Interpolate between two bracketing elements
+                    const ratio = (centerY - before.top) / (after.top - before.top);
+                    targetLine = Math.round(before.line + (after.line - before.line) * ratio);
+                } else if (before) {
+                    targetLine = before.line;
+                } else if (after) {
+                    targetLine = after.line;
                 }
-            }, 100);
+                
+                if (targetLine >= 0) {
+                    vscode.postMessage({ type: 'revealLine', line: targetLine });
+                }
+            }, 80);
         }
         
         // Attach scroll listener
@@ -606,7 +622,7 @@ export class PreviewPanel {
             previewEl.addEventListener('scroll', handlePreviewScroll, { passive: true });
         }
 
-        // Handle scroll messages from editor
+        // ========== EDITOR→PREVIEW SCROLL SYNC ==========
         window.addEventListener('message', event => {
             const message = event.data;
             if (message.type === 'scrollTo') {
@@ -626,66 +642,62 @@ export class PreviewPanel {
             const viewHeight = previewEl ? previewEl.clientHeight : window.innerHeight;
             const scrollHeight = previewEl ? previewEl.scrollHeight : document.body.scrollHeight;
             const halfView = viewHeight / 2;
-            
-            // Edge case: near end of document (use endLine for accurate bottom detection)
-            const effectiveEnd = endLine || line;
-            if (totalLines && effectiveEnd >= totalLines - 5) {
-                return scrollHeight - viewHeight;  // Scroll to bottom
-            }
+            const maxScroll = Math.max(0, scrollHeight - viewHeight);
             
             // Edge case: at start
             if (line <= 1) {
                 return 0;
             }
             
-            // Try to find exact element
-            const exactEl = document.querySelector(\`[data-line="\${line}"]\`);
-            if (exactEl) {
-                const target = exactEl.offsetTop - halfView + (exactEl.clientHeight / 2);
-                return Math.max(0, Math.min(target, scrollHeight - viewHeight));
+            // Edge case: near end of document
+            const effectiveEnd = endLine || line;
+            if (totalLines && effectiveEnd >= totalLines - 3) {
+                return maxScroll;
             }
             
-            // Interpolate between known elements
-            const elements = Array.from(document.querySelectorAll('[data-line]'));
-            if (elements.length > 0) {
-                const sorted = elements.map(el => ({
-                    line: parseInt(el.getAttribute('data-line')),
-                    top: el.offsetTop
-                })).sort((a, b) => a.line - b.line);
-                
-                let before = null, after = null;
-                for (const item of sorted) {
-                    if (item.line <= line) before = item;
-                    else { after = item; break; }
+            const sorted = getSortedLineElements();
+            if (sorted.length === 0) {
+                // Fallback: proportional scroll
+                if (totalLines) {
+                    return Math.max(0, Math.min((line / totalLines) * scrollHeight, maxScroll));
                 }
-                
-                let target = 0;
-                if (before && after) {
-                    const ratio = (line - before.line) / (after.line - before.line);
-                    target = before.top + (after.top - before.top) * ratio - halfView;
-                } else if (before) {
-                    // Line is BEYOND the last known data-line element.
-                    // Use proportional extrapolation from the last element to the end.
-                    const lastLine = sorted[sorted.length - 1];
-                    if (totalLines && lastLine.line < totalLines) {
-                        const remainingRatio = (line - lastLine.line) / (totalLines - lastLine.line);
-                        const remainingScroll = scrollHeight - lastLine.top;
-                        target = lastLine.top + remainingScroll * remainingRatio - halfView;
-                    } else {
-                        target = before.top - halfView;
-                    }
-                }
-                return Math.max(0, Math.min(target, scrollHeight - viewHeight));
+                return 0;
             }
             
-            // Fallback: proportional scroll
-            if (totalLines) {
-                return Math.max(0, (line / totalLines) * scrollHeight);
+            // Try exact element match first
+            const exactItem = sorted.find(item => item.line === line);
+            if (exactItem) {
+                const target = exactItem.top - halfView + (exactItem.height / 2);
+                return Math.max(0, Math.min(target, maxScroll));
             }
-            return 0;
+            
+            // Interpolate between bracketing data-line elements
+            let before = null, after = null;
+            for (const item of sorted) {
+                if (item.line <= line) before = item;
+                else { after = item; break; }
+            }
+            
+            let target = 0;
+            if (before && after) {
+                const ratio = (line - before.line) / (after.line - before.line);
+                target = before.top + (after.top - before.top) * ratio - halfView;
+            } else if (before) {
+                // Beyond last known element — extrapolate to end
+                if (totalLines && before.line < totalLines) {
+                    const remainingRatio = (line - before.line) / (totalLines - before.line);
+                    const remainingScroll = scrollHeight - before.top;
+                    target = before.top + remainingScroll * remainingRatio - halfView;
+                } else {
+                    target = before.top - halfView;
+                }
+            } else if (after) {
+                target = 0;
+            }
+            return Math.max(0, Math.min(target, maxScroll));
         }
         
-        // ========== TOOLBAR LOGIC - FIXED TO CAPTURE BLOCKCONTEXT ==========
+        // ========== TOOLBAR LOGIC ==========
         document.addEventListener('mouseup', event => {
             const selection = window.getSelection();
             const toolbar = document.getElementById('floatingToolbar');
@@ -699,34 +711,27 @@ export class PreviewPanel {
                 const selectedText = selection.toString();
                 toolbar.dataset.selectedText = selectedText;
                 
-                // FIXED: Use closest() to find parent block element
                 const startElem = range.startContainer.nodeType === 1 
                     ? range.startContainer 
                     : range.startContainer.parentElement;
                 const blockElement = startElem ? startElem.closest('li, p, td, th, h1, h2, h3, h4, h5, h6') : null;
                 const blockContext = blockElement ? blockElement.textContent || '' : '';
                 
-                // Find closest element with data-line attribute
                 const lineElement = startElem ? startElem.closest('[data-line]') : null;
                 const lineNumber = lineElement ? parseInt(lineElement.getAttribute('data-line'), 10) : -1;
                 
                 toolbar.dataset.blockContext = blockContext;
                 toolbar.dataset.sourceLine = lineNumber;
                 
-                // GLOBAL OCCURRENCE INDEX: Count which occurrence of selectedText
-                // this is across the ENTIRE preview DOM. This works even when
-                // duplicate lines are inside a single <p> (breaks: true).
+                // GLOBAL OCCURRENCE INDEX
                 let globalOccIdx = 0;
                 try {
                     const previewRoot = document.getElementById('preview');
                     if (previewRoot && selectedText) {
-                        // Create a range from start of preview to start of selection
                         const preRange = document.createRange();
                         preRange.setStart(previewRoot, 0);
                         preRange.setEnd(range.startContainer, range.startOffset);
                         const textBeforeSelection = preRange.toString();
-                        
-                        // Count how many times selectedText appears before our selection
                         let searchFrom = 0;
                         while (true) {
                             const idx = textBeforeSelection.indexOf(selectedText, searchFrom);
@@ -736,19 +741,16 @@ export class PreviewPanel {
                         }
                     }
                 } catch (err) {
-                    console.error('[webview] Error calculating globalOccurrenceIndex:', err);
                     globalOccIdx = 0;
                 }
                 toolbar.dataset.globalOccurrenceIndex = globalOccIdx;
                 
-                // Also keep sibling-based counting as fallback
                 let textOccurrenceIndex = 0;
                 try {
                     if (selectedText && blockElement) {
                         let sibling = blockElement.previousElementSibling;
                         while (sibling) {
-                            const sibText = sibling.textContent || '';
-                            if (sibText.includes(selectedText)) {
+                            if ((sibling.textContent || '').includes(selectedText)) {
                                 textOccurrenceIndex++;
                             }
                             sibling = sibling.previousElementSibling;
@@ -758,8 +760,6 @@ export class PreviewPanel {
                     textOccurrenceIndex = 0;
                 }
                 toolbar.dataset.blockOccurrenceIndex = textOccurrenceIndex;
-                
-                console.log('[webview] Selection: block=' + (blockElement ? blockElement.tagName : 'null') + ', context="' + blockContext.substring(0, 50) + '...", line=' + lineNumber + ', globalOccIdx=' + globalOccIdx + ', siblingIdx=' + textOccurrenceIndex);
             } else {
                 if (!toolbar.contains(event.target)) toolbar.classList.remove('visible');
             }
@@ -796,23 +796,16 @@ export class PreviewPanel {
         document.querySelector('.fab-export').onclick = () => exportPdf();
         
         // ========== KEYBOARD SHORTCUTS (UNDO/REDO) ==========
-        // Capture Cmd+Z and Cmd+Shift+Z to trigger undo/redo in the editor
         document.addEventListener('keydown', (e) => {
-            // Check for Cmd (Mac) or Ctrl (Windows/Linux)
             const isMod = e.metaKey || e.ctrlKey;
-            
             if (isMod && e.key === 'z') {
                 e.preventDefault();
                 if (e.shiftKey) {
-                    // Cmd+Shift+Z = Redo
                     vscode.postMessage({ type: 'redo' });
                 } else {
-                    // Cmd+Z = Undo
                     vscode.postMessage({ type: 'undo' });
                 }
             }
-            
-            // Also support Cmd+Y for redo (Windows style)
             if (isMod && e.key === 'y') {
                 e.preventDefault();
                 vscode.postMessage({ type: 'redo' });
@@ -874,97 +867,58 @@ export class PreviewPanel {
         ${inlineScript}
     </script>
     <script>
-        function _inlineAddLineAttributes(sourceLines) {
-            const preview = document.getElementById('preview');
-            const usedLines = new Set();
-            
-            // Normalize text for comparison (remove markdown syntax, whitespace)
-            function normalize(text) {
-                return (text || '')
-                    .replace(/[*_=~\`#\\[\\]()]/g, '')  // Remove markdown chars
-                    .replace(/\\s+/g, '')              // Remove whitespace
-                    .toLowerCase()
-                    .substring(0, 50);                 // Only compare first 50 chars
-            }
-            
-            // Build a map of normalized source lines for quick lookup
-            const sourceMap = sourceLines.map((line, idx) => ({
-                idx: idx,
-                raw: line,
-                norm: normalize(line)
-            }));
-            
-            // Get all block elements that should have data-line
-            const blockElements = preview.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote > p, pre, .katex-display, table, .emoji-warning');
-            
-            // Track our position in source as we go through elements
-            let searchStartIdx = 0;
-            
-            blockElements.forEach(el => {
-                const elText = el.textContent || '';
-                const normElText = normalize(elText);
-                
-                // Skip very short elements
-                if (normElText.length < 2) return;
-                
-                // Search forward from our last position (not from 0)
-                // This maintains document order and prevents wrong matches
-                let bestMatch = -1;
-                let bestScore = 0;
-                
-                for (let i = searchStartIdx; i < sourceMap.length; i++) {
-                    if (usedLines.has(i)) continue;
-                    
-                    const srcNorm = sourceMap[i].norm;
-                    if (srcNorm.length < 2) continue;
-                    
-                    // Calculate match score
-                    let score = 0;
-                    if (srcNorm === normElText) {
-                        score = 100;  // Perfect match
-                    } else if (srcNorm.includes(normElText) || normElText.includes(srcNorm)) {
-                        // Partial match - score based on overlap
-                        const overlap = Math.min(srcNorm.length, normElText.length);
-                        score = overlap;
-                    }
-                    
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestMatch = i;
-                        
-                        // If perfect match, stop searching
-                        if (score === 100) break;
-                    }
-                    
-                    // Don't search too far ahead (within 20 lines)
-                    if (i - searchStartIdx > 20 && bestMatch !== -1) break;
+        // ========== LINE-TRACKING MARKDOWN RENDERER ==========
+        // Embeds data-line attributes DURING parsing (not post-render matching)
+        
+        // Build a line offset map: charOffset → lineNumber
+        function buildLineMap(text) {
+            const map = [0]; // line 0 starts at char 0
+            for (let i = 0; i < text.length; i++) {
+                if (text[i] === '\\n') {
+                    map.push(i + 1); // next line starts after \\n
                 }
-                
-                if (bestMatch !== -1 && bestScore >= 3) {
-                    el.setAttribute('data-line', bestMatch);
-                    usedLines.add(bestMatch);
-                    // Move search start forward
-                    searchStartIdx = bestMatch + 1;
-                }
-            });
-            
-            // Fallback: assign evenly distributed line numbers to unmatched elements
-            const unmatched = Array.from(blockElements).filter(el => !el.hasAttribute('data-line'));
-            if (unmatched.length > 0 && sourceLines.length > 0) {
-                const step = Math.max(1, Math.floor(sourceLines.length / unmatched.length));
-                let line = 0;
-                unmatched.forEach((el, idx) => {
-                    while (usedLines.has(line) && line < sourceLines.length) line++;
-                    if (line < sourceLines.length) {
-                        el.setAttribute('data-line', line);
-                        usedLines.add(line);
-                        line += step;
-                    }
-                });
             }
+            return map;
+        }
+        
+        function charOffsetToLine(offset, lineMap) {
+            // Binary search for the line containing this offset
+            let lo = 0, hi = lineMap.length - 1;
+            while (lo < hi) {
+                const mid = (lo + hi + 1) >> 1;
+                if (lineMap[mid] <= offset) lo = mid;
+                else hi = mid - 1;
+            }
+            return lo;
+        }
+        
+        // Find the character offset of a token's raw text in the source
+        // We track searchFrom to maintain document order
+        let _tokenSearchFrom = 0;
+        
+        function findTokenOffset(raw, sourceText) {
+            if (!raw || raw.length === 0) return -1;
+            // Search from current position forward
+            const idx = sourceText.indexOf(raw, _tokenSearchFrom);
+            if (idx !== -1) {
+                _tokenSearchFrom = idx + raw.length;
+                return idx;
+            }
+            // Fallback: search from beginning (shouldn't happen often)
+            const fallback = sourceText.indexOf(raw);
+            if (fallback !== -1) {
+                _tokenSearchFrom = fallback + raw.length;
+                return fallback;
+            }
+            return -1;
         }
 
         const renderer = new marked.Renderer();
+        
+        // Store line info that walkTokens populates
+        const tokenLineMap = new WeakMap();
+        
+        // Highlight text extensions
         renderer.text = function(token) {
             let text = token.text || token;
             if (typeof text === 'string') {
@@ -973,7 +927,8 @@ export class PreviewPanel {
             }
             return text;
         };
-        
+
+        // Blockquote with alert support
         renderer.blockquote = function(quote) {
             const match = quote.match(/^<p>\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\]\\s*/i);
             if (match) {
@@ -1000,10 +955,160 @@ export class PreviewPanel {
         function renderMarkdown(text) {
             const mathBlocks = []; 
             const inlineMath = [];
+            
+            // Protect math blocks from markdown parsing
             text = text.replace(/\\$\\$([^$]+)\\$\\$/g, (m, math) => { mathBlocks.push(math); return \`%%MATHBLOCK\${mathBlocks.length-1}%%\`; });
             text = text.replace(/\\$([^$\\n]+)\\$/g, (m, math) => { inlineMath.push(math); return \`%%INLINEMATH\${inlineMath.length-1}%%\`; });
             
-            let html = marked.parse(text);
+            // Build line map for source line tracking
+            const lineMap = buildLineMap(text);
+            _tokenSearchFrom = 0;
+            
+            // Tokenize first to get tokens with raw text
+            const tokens = marked.lexer(text);
+            
+            // Walk tokens and assign line numbers based on their raw text position
+            function assignLines(tokenList) {
+                for (const token of tokenList) {
+                    if (token.raw) {
+                        const offset = findTokenOffset(token.raw, text);
+                        if (offset !== -1) {
+                            token._sourceLine = charOffsetToLine(offset, lineMap);
+                        }
+                    }
+                    // Recurse into child tokens
+                    if (token.tokens) assignLines(token.tokens);
+                    if (token.items) {
+                        for (const item of token.items) {
+                            if (item.raw) {
+                                const offset = text.indexOf(item.raw, Math.max(0, _tokenSearchFrom - item.raw.length - 50));
+                                if (offset !== -1) {
+                                    item._sourceLine = charOffsetToLine(offset, lineMap);
+                                }
+                            }
+                            if (item.tokens) assignLines(item.tokens);
+                        }
+                    }
+                    if (token.rows) {
+                        // table rows
+                        for (const row of token.rows) {
+                            for (const cell of row) {
+                                if (cell.tokens) assignLines(cell.tokens);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Reset search position and assign lines
+            _tokenSearchFrom = 0;
+            assignLines(tokens);
+            
+            // Now render with a custom renderer that reads _sourceLine
+            // We need to override the parser to inject data-line into block elements
+            const origParagraph = renderer.paragraph;
+            const origHeading = renderer.heading;
+            const origCode = renderer.code;
+            const origBlockquote = renderer.blockquote;
+            const origListitem = renderer.listitem;
+            const origTable = renderer.table;
+            const origHr = renderer.hr;
+            
+            // Store current token line during rendering
+            let currentTokenLines = [];
+            
+            // Walk tokens to build an ordered list of (type, line) for the renderer
+            function collectBlockLines(tokenList) {
+                for (const token of tokenList) {
+                    if (token._sourceLine !== undefined) {
+                        if (['paragraph', 'heading', 'code', 'blockquote', 'table', 'hr', 'list'].includes(token.type)) {
+                            currentTokenLines.push({ type: token.type, line: token._sourceLine });
+                        }
+                    }
+                    if (token.type === 'list' && token.items) {
+                        for (const item of token.items) {
+                            if (item._sourceLine !== undefined) {
+                                currentTokenLines.push({ type: 'list_item', line: item._sourceLine });
+                            }
+                            if (item.tokens) collectBlockLines(item.tokens);
+                        }
+                    }
+                }
+            }
+            collectBlockLines(tokens);
+            
+            // Counters for each block type to match tokens to renderer calls
+            const lineCounters = {};
+            function getNextLine(type) {
+                if (!lineCounters[type]) lineCounters[type] = 0;
+                const items = currentTokenLines.filter(t => t.type === type);
+                const idx = lineCounters[type]++;
+                return (idx < items.length) ? items[idx].line : undefined;
+            }
+            
+            // Override renderer methods to inject data-line
+            renderer.paragraph = function(text) {
+                const line = getNextLine('paragraph');
+                const attr = (line !== undefined) ? \` data-line="\${line}"\` : '';
+                return \`<p\${attr}>\${text}</p>\\n\`;
+            };
+            
+            renderer.heading = function(text, level, raw) {
+                const line = getNextLine('heading');
+                const attr = (line !== undefined) ? \` data-line="\${line}"\` : '';
+                return \`<h\${level}\${attr}>\${text}</h\${level}>\\n\`;
+            };
+            
+            renderer.code = function(code, language, escaped) {
+                const line = getNextLine('code');
+                const attr = (line !== undefined) ? \` data-line="\${line}"\` : '';
+                const lang = (language || '').match(/^\\S*/)?.[0] || '';
+                let highlighted = code;
+                if (lang && hljs.getLanguage(lang)) {
+                    try { highlighted = hljs.highlight(code, { language: lang }).value; } catch (e) {}
+                } else {
+                    try { highlighted = hljs.highlightAuto(code).value; } catch (e) {}
+                }
+                const langClass = lang ? \` class="language-\${lang}"\` : '';
+                return \`<pre\${attr}><code\${langClass}>\${highlighted}</code></pre>\\n\`;
+            };
+            
+            renderer.blockquote = function(quote) {
+                const line = getNextLine('blockquote');
+                const attr = (line !== undefined) ? \` data-line="\${line}"\` : '';
+                // Alert/admonition support
+                const match = quote.match(/^<p>\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\]\\s*/i);
+                if (match) {
+                    const type = match[1].toLowerCase();
+                    const title = type.charAt(0).toUpperCase() + type.slice(1);
+                    const content = quote.replace(/^<p>\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\]\\s*/i, '<p>');
+                    return \`<div\${attr} class="markdown-alert markdown-alert-\${type}"><p class="markdown-alert-title">\${title}</p>\${content}</div>\\n\`;
+                }
+                return \`<blockquote\${attr}>\${quote}</blockquote>\\n\`;
+            };
+            
+            renderer.listitem = function(text) {
+                const line = getNextLine('list_item');
+                const attr = (line !== undefined) ? \` data-line="\${line}"\` : '';
+                return \`<li\${attr}>\${text}</li>\\n\`;
+            };
+            
+            renderer.table = function(header, body) {
+                const line = getNextLine('table');
+                const attr = (line !== undefined) ? \` data-line="\${line}"\` : '';
+                return \`<table\${attr}>\\n<thead>\\n\${header}</thead>\\n<tbody>\\n\${body}</tbody>\\n</table>\\n\`;
+            };
+            
+            renderer.hr = function() {
+                const line = getNextLine('hr');
+                const attr = (line !== undefined) ? \` data-line="\${line}"\` : '';
+                return \`<hr\${attr}>\\n\`;
+            };
+            
+            // Parse using the token tree (which already has line info)
+            let html = marked.parser(tokens);
+            
+            // Restore math blocks
             html = html.replace(/%%MATHBLOCK(\\d+)%%/g, (m, i) => {
                 try { return katex.renderToString(mathBlocks[parseInt(i)], { displayMode: true, throwOnError: false }); } catch(e) { return m; }
             });
@@ -1018,16 +1123,17 @@ export class PreviewPanel {
         document.getElementById('preview').innerHTML = renderMarkdown(raw);
         
         // Fix relative image paths
-        if (documentBaseUri) {
-            document.querySelectorAll('#preview img').forEach(img => {
-                const src = img.getAttribute('src');
-                if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:') && !src.startsWith('vscode-')) {
-                    img.setAttribute('src', documentBaseUri + '/' + src);
-                }
-            });
+        function fixImagePaths() {
+            if (documentBaseUri) {
+                document.querySelectorAll('#preview img').forEach(img => {
+                    const src = img.getAttribute('src');
+                    if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:') && !src.startsWith('vscode-')) {
+                        img.setAttribute('src', documentBaseUri + '/' + src);
+                    }
+                });
+            }
         }
-        
-        _inlineAddLineAttributes(raw.split(new RegExp('\\n')));
+        fixImagePaths();
         
         // Handle incremental content updates (preserves scroll position)
         window.addEventListener('message', function(event) {
@@ -1038,18 +1144,7 @@ export class PreviewPanel {
                 
                 const newRaw = message.content;
                 document.getElementById('preview').innerHTML = renderMarkdown(newRaw);
-                
-                // Fix relative image paths
-                if (documentBaseUri) {
-                    document.querySelectorAll('#preview img').forEach(function(img) {
-                        const src = img.getAttribute('src');
-                        if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:') && !src.startsWith('vscode-')) {
-                            img.setAttribute('src', documentBaseUri + '/' + src);
-                        }
-                    });
-                }
-                
-                _inlineAddLineAttributes(newRaw.split(new RegExp('\\n')));
+                fixImagePaths();
                 
                 // Save scroll state
                 if (previewEl) {
