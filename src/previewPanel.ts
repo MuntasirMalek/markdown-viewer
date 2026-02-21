@@ -93,7 +93,7 @@ export class PreviewPanel {
                         vscode.window.showErrorMessage(`Preview Error: ${message.text}`);
                         return;
                     case 'deleteLines':
-                        this._deleteLines(message.startLine, message.endLine);
+                        this._deleteLines(message.lines);
                         break;
                     case 'applyFormat':
                         this._applyFormat(message.format, message.selectedText, message.sourceLine, message.blockContext || '', message.blockOccurrenceIndex || 0, message.globalOccurrenceIndex ?? -1);
@@ -165,29 +165,33 @@ export class PreviewPanel {
         }
     }
 
-    private _deleteLines(startLine: number, endLine: number) {
-        if (!this._currentDocument) return;
+    private _deleteLines(lines: number[]) {
+        if (!this._currentDocument || !lines || lines.length === 0) return;
         const editor = vscode.window.visibleTextEditors.find(
             e => e.document.uri.toString() === this._currentDocument?.uri.toString()
         );
         if (!editor) return;
         const document = editor.document;
-
-        // Clamp to valid range — delete ONLY the requested lines, nothing more
         const docLineCount = document.lineCount;
-        const safeStart = Math.max(0, Math.min(startLine, docLineCount - 1));
-        const safeEnd = Math.max(safeStart, Math.min(endLine, docLineCount - 1));
 
         // Suppress scroll sync during editing
         PreviewPanel.lastFormatTime = Date.now();
         PreviewPanel.lastRemoteScrollTime = Date.now();
 
-        const deleteRange = new vscode.Range(
-            new vscode.Position(safeStart, 0),
-            new vscode.Position(Math.min(safeEnd + 1, docLineCount - 1),
-                safeEnd + 1 < docLineCount ? 0 : document.lineAt(docLineCount - 1).text.length)
-        );
-        editor.edit(editBuilder => editBuilder.delete(deleteRange));
+        // Deduplicate, filter valid, and sort in REVERSE order
+        // (delete from bottom to top so line numbers stay valid)
+        const uniqueLines = [...new Set(lines)]
+            .filter(l => l >= 0 && l < docLineCount)
+            .sort((a, b) => b - a);
+
+        if (uniqueLines.length === 0) return;
+
+        editor.edit(editBuilder => {
+            for (const lineNum of uniqueLines) {
+                const lineRange = document.lineAt(lineNum).rangeIncludingLineBreak;
+                editBuilder.delete(lineRange);
+            }
+        });
     }
 
     private _applyFormat(format: string, selectedText: string, sourceLine: number = -1, blockContext: string = '', blockOccurrenceIndex: number = 0, globalOccurrenceIndex: number = -1) {
@@ -908,7 +912,7 @@ export class PreviewPanel {
         document.getElementById('highlightBtn').onclick = () => applyToolbarFormat('highlight');
         document.getElementById('redHighlightBtn').onclick = () => applyToolbarFormat('red-highlight');
         document.getElementById('deleteBtn').onclick = () => {
-            // DELETE uses data-line based approach instead of text matching
+            // DELETE uses data-line values to identify exactly which source lines to remove
             const selection = window.getSelection();
             if (!selection || selection.isCollapsed) return;
             
@@ -916,38 +920,42 @@ export class PreviewPanel {
             const previewEl = document.getElementById('preview');
             if (!previewEl) return;
             
-            // Get the selection's bounding rect to check which elements are truly selected
+            // Get the selection's bounding rect
             const selRect = range.getBoundingClientRect();
+            if (selRect.height === 0) return;
             
-            // Find data-line elements whose vertical center falls within the selection rect
+            // Find data-line elements that are meaningfully within the selection
             const allLineEls = Array.from(previewEl.querySelectorAll('[data-line]'));
-            const linesInSelection = [];
+            const selectedLines = [];
             
             for (const el of allLineEls) {
                 const elRect = el.getBoundingClientRect();
-                const elCenterY = elRect.top + elRect.height / 2;
-                // Element's vertical center must be within the selection bounds
-                if (elCenterY >= selRect.top && elCenterY <= selRect.bottom) {
-                    linesInSelection.push(parseInt(el.getAttribute('data-line'), 10));
+                if (elRect.height === 0) continue;
+                
+                // Calculate how much of this element overlaps with the selection
+                const overlapTop = Math.max(selRect.top, elRect.top);
+                const overlapBottom = Math.min(selRect.bottom, elRect.bottom);
+                const overlapHeight = overlapBottom - overlapTop;
+                
+                // Require at least 50% of the element to be within selection
+                if (overlapHeight > elRect.height * 0.5) {
+                    selectedLines.push(parseInt(el.getAttribute('data-line'), 10));
                 }
             }
             
-            if (linesInSelection.length === 0) {
-                // Fallback: try the nearest data-line ancestor
+            if (selectedLines.length === 0) {
+                // Fallback: try the nearest data-line ancestor of selection start
                 const startElem = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
                 const lineEl = startElem ? startElem.closest('[data-line]') : null;
                 if (lineEl) {
-                    linesInSelection.push(parseInt(lineEl.getAttribute('data-line'), 10));
+                    selectedLines.push(parseInt(lineEl.getAttribute('data-line'), 10));
                 }
             }
             
-            if (linesInSelection.length > 0) {
-                const startLine = Math.min(...linesInSelection);
-                const endLine = Math.max(...linesInSelection);
+            if (selectedLines.length > 0) {
                 vscode.postMessage({
                     type: 'deleteLines',
-                    startLine: startLine,
-                    endLine: endLine
+                    lines: selectedLines
                 });
                 document.getElementById('floatingToolbar').classList.remove('visible');
                 selection.removeAllRanges();
