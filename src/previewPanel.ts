@@ -173,29 +173,10 @@ export class PreviewPanel {
         if (!editor) return;
         const document = editor.document;
 
-        // Clamp to valid range
+        // Clamp to valid range — delete ONLY the requested lines, nothing more
         const docLineCount = document.lineCount;
         const safeStart = Math.max(0, Math.min(startLine, docLineCount - 1));
-
-        // endLine is the last data-line found; we need to find where its content ends
-        // Look forward from endLine until we hit the next data-line marker or end of doc
-        // For simplicity, find the next non-empty line that would start a new block
-        let safeEnd = Math.max(safeStart, Math.min(endLine, docLineCount - 1));
-
-        // Extend to cover the full content block of the last data-line element
-        // Keep going until we hit an empty line followed by content, or another heading/list marker
-        for (let i = safeEnd + 1; i < docLineCount; i++) {
-            const lineText = document.lineAt(i).text;
-            if (lineText.trim() === '') {
-                safeEnd = i; // Include the trailing blank line
-                break;
-            }
-            // If this looks like a new block element, stop before it
-            if (/^(#{1,6}\s|[-*+]\s|\d+\.\s|\|)/.test(lineText.trim()) && i > endLine) {
-                break;
-            }
-            safeEnd = i; // This line is continuation of the current block
-        }
+        const safeEnd = Math.max(safeStart, Math.min(endLine, docLineCount - 1));
 
         // Suppress scroll sync during editing
         PreviewPanel.lastFormatTime = Date.now();
@@ -928,7 +909,6 @@ export class PreviewPanel {
         document.getElementById('redHighlightBtn').onclick = () => applyToolbarFormat('red-highlight');
         document.getElementById('deleteBtn').onclick = () => {
             // DELETE uses data-line based approach instead of text matching
-            // This avoids issues with KaTeX-rendered math and markdown formatting
             const selection = window.getSelection();
             if (!selection || selection.isCollapsed) return;
             
@@ -936,13 +916,18 @@ export class PreviewPanel {
             const previewEl = document.getElementById('preview');
             if (!previewEl) return;
             
-            // Find all data-line elements that overlap with the selection
+            // Get the selection's bounding rect to check which elements are truly selected
+            const selRect = range.getBoundingClientRect();
+            
+            // Find data-line elements whose vertical center falls within the selection rect
             const allLineEls = Array.from(previewEl.querySelectorAll('[data-line]'));
             const linesInSelection = [];
             
             for (const el of allLineEls) {
-                // Check if this element is within or overlaps the selection
-                if (selection.containsNode(el, true)) {
+                const elRect = el.getBoundingClientRect();
+                const elCenterY = elRect.top + elRect.height / 2;
+                // Element's vertical center must be within the selection bounds
+                if (elCenterY >= selRect.top && elCenterY <= selRect.bottom) {
                     linesInSelection.push(parseInt(el.getAttribute('data-line'), 10));
                 }
             }
