@@ -41,7 +41,7 @@ function findChromePath(): string | undefined {
     return undefined;
 }
 
-function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): string {
+function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri, documentDir: string): string {
     const vendorPath = path.join(extensionUri.fsPath, 'media', 'vendor');
     const toFileUri = (p: string) => vscode.Uri.file(p).toString();
     const katexCss = toFileUri(path.join(vendorPath, 'katex', 'katex.min.css'));
@@ -56,8 +56,8 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="${toFileUri(documentDir)}/">
     <title>Markdown Export</title>
-    <!-- We inline styles for CLI PDF export as file:// access might be restricted in some chrome contexts -->
     <link rel="stylesheet" href="${katexCss}"> 
     <script src="${katexJs}"></script>
     <link rel="stylesheet" href="${highlightCss}">
@@ -66,21 +66,46 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
     <link rel="stylesheet" href="${githubCss}">
     <style>
         body { background-color: white; }
-        .markdown-body { box-sizing: border-box; min-width: 200px; max-width: 980px; margin: 0 auto; padding: 20px; }
-        @page { size: A4; margin: 20mm; }
-        .katex-display { overflow-x: auto; overflow-y: hidden; }
+        .markdown-body { box-sizing: border-box; min-width: 200px; margin: 0 auto; padding: 20px; }
+        @page { size: A4; margin: 15mm; }
+        .katex-display { overflow-x: visible; overflow-y: hidden; }
         pre { background-color: #f6f8fa !important; }
-        .emoji-warning {
-            display: inline-block;
-            width: 95%; 
-            background-color: #f1f1f1; 
-            color: #24292e;
-            padding: 8px 12px;
-            border-left: 4px solid #f1f1f1;
-            border-radius: 0 2px 2px 0;
-            margin: 4px 0;
-            white-space: normal;
+        img { max-width: 100%; height: auto; }
+        /* Fix: Prevent wide tables from being cut off in PDF */
+        .markdown-body table {
+            display: table !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            overflow: hidden !important;
+            table-layout: auto;
+            word-wrap: break-word;
+            font-size: 9pt;
+            border-collapse: collapse;
+            border: 1px solid #d0d7de;
         }
+        .markdown-body table th,
+        .markdown-body table td {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+        /* Alerts styling for PDF */
+        .markdown-alert {
+            padding: 8px 16px;
+            margin-bottom: 16px;
+            border-left: 4px solid;
+        }
+        .markdown-alert-title { font-weight: 600; margin-bottom: 4px; }
+        .markdown-alert-note { border-left-color: #0969da; background-color: rgba(9, 105, 218, 0.1); }
+        .markdown-alert-note .markdown-alert-title { color: #0969da; }
+        .markdown-alert-tip { border-left-color: #1a7f37; background-color: rgba(26, 127, 55, 0.1); }
+        .markdown-alert-tip .markdown-alert-title { color: #1a7f37; }
+        .markdown-alert-important { border-left-color: #8250df; background-color: rgba(130, 80, 223, 0.1); }
+        .markdown-alert-important .markdown-alert-title { color: #8250df; }
+        .markdown-alert-warning { border-left-color: #9a6700; background-color: rgba(154, 103, 0, 0.1); }
+        .markdown-alert-warning .markdown-alert-title { color: #9a6700; }
+        .markdown-alert-caution { border-left-color: #d1242f; background-color: rgba(209, 36, 47, 0.1); }
+        .markdown-alert-caution .markdown-alert-title { color: #d1242f; }
     </style>
 </head>
 <body>
@@ -91,9 +116,7 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri): 
             let text = token.text || token;
             if (typeof text === 'string') {
                 text = text.replace(/==([^=]+)==/g, '<mark style="background-color: #ffff00; color: #000;">$1</mark>');
-                if (text.includes('⚠️')) {
-                     text = text.replace(/(⚠️)(\s*[^<\\n]+)/g, '<span class="emoji-warning">$1 $2</span>');
-                }
+                text = text.replace(/::([^:]+)::/g, '<mark style="background-color: #ff6b6b; color: #fff;">$1</mark>');
             }
             return text;
         };
@@ -161,7 +184,8 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
     // 2. Prepare Temp File
     const tmpDir = os.tmpdir();
     const tmpHtmlPath = path.join(tmpDir, `mve_export_${Date.now()}.html`);
-    const htmlContent = generateHtmlForPdf(document.getText(), extensionUri);
+    const documentDir = path.dirname(document.uri.fsPath);
+    const htmlContent = generateHtmlForPdf(document.getText(), extensionUri, documentDir);
 
     // We MUST wait for JS to execute.
     // Chrome Headless CLI --print-to-pdf renders the HTML *after* it loads.
@@ -202,6 +226,7 @@ export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.Tex
                 '--headless=new',
                 '--disable-gpu',
                 '--no-pdf-header-footer',
+                '--allow-file-access-from-files',
                 `--print-to-pdf=${saveUri.fsPath}`,
                 '--virtual-time-budget=5000',
                 tmpHtmlPath

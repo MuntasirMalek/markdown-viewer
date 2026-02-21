@@ -1,31 +1,8 @@
 /* ===== CSS Variables ===== */
 :root {
-    /* Preview (white/light) */
-    --bg-preview: #ffffff;
-    --text-preview: #24292e;
-    --text-preview-secondary: #6a737d;
-    --preview-border: #eaecef;
-
-    /* Code in preview */
-    --code-bg: #f6f8fa;
-    --code-border: #d0d7de;
-
-    /* Table colors - MPE Plain Style (Transparent) */
-    --table-header-bg: transparent;
-    --table-row-alt: transparent;
-    --table-border: #dfe2e5;
-
-    /* MPE Shared Texture (Solid Gray) */
-    --texture-bg: #f1f1f1;
-    --texture-border: #f1f1f1;
-    --texture-text: #24292e;
-
     /* Highlight - FORCE NEON YELLOW */
     --highlight-bg: #ffff00;
     --highlight-red-bg: #ff6b6b;
-
-    /* Links */
-    --link-color: #0969da;
 
     /* Toolbar */
     --toolbar-bg: #2d2d30;
@@ -51,8 +28,7 @@ mark.red-highlight {
     color: #ffffff !important;
 }
 
-
-/* ===== Reset & Base ===== */
+/* ===== Reset ===== */
 * {
     margin: 0;
     padding: 0;
@@ -63,9 +39,6 @@ html,
 body {
     height: 100%;
     overflow: hidden;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: var(--bg-preview);
-    color: var(--text-preview);
 }
 
 /* ===== Custom Scrollbar ===== */
@@ -87,173 +60,12 @@ body {
     background: #a8a8a8;
 }
 
-/* ===== Preview Content ===== */
+/* ===== Preview Content (Scrollable Container) ===== */
 .preview-content {
     height: 100vh;
     overflow-y: auto;
     padding: 24px 32px;
-    line-height: 1.6;
 }
-
-/* ===== Typography ===== */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-    margin-top: 24px;
-    margin-bottom: 16px;
-    font-weight: 600;
-    line-height: 1.25;
-    color: var(--text-preview);
-}
-
-h1:first-child,
-h2:first-child,
-h3:first-child {
-    margin-top: 0;
-}
-
-h1 {
-    font-size: 2em;
-    padding-bottom: 0.3em;
-    border-bottom: 1px solid var(--preview-border);
-}
-
-h2 {
-    font-size: 1.5em;
-    padding-bottom: 0.3em;
-    border-bottom: 1px solid var(--preview-border);
-}
-
-h3 {
-    font-size: 1.25em;
-}
-
-h4 {
-    font-size: 1em;
-}
-
-h5 {
-    font-size: 0.875em;
-}
-
-h6 {
-    font-size: 0.85em;
-    color: var(--text-preview-secondary);
-}
-
-p {
-    margin-bottom: 16px;
-}
-
-/* ===== Links ===== */
-a {
-    color: var(--link-color);
-    text-decoration: none;
-}
-
-a:hover {
-    text-decoration: underline;
-}
-
-/* ===== Code ===== */
-code {
-    background: var(--code-bg);
-    padding: 0.2em 0.4em;
-    border-radius: 4px;
-    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    font-size: 0.9em;
-}
-
-pre {
-    background: var(--code-bg);
-    border: 1px solid var(--code-border);
-    border-radius: 6px;
-    padding: 16px;
-    overflow-x: auto;
-    margin-bottom: 16px;
-}
-
-pre code {
-    background: none;
-    padding: 0;
-    border-radius: 0;
-    font-size: 0.875em;
-    line-height: 1.5;
-}
-
-/* ===== Blockquotes & Texture Blocks ===== */
-blockquote {
-    padding: 8px 16px;
-    margin: 0 0 16px;
-    /* Solid Gray Block Logic */
-    border-left: 4px solid var(--texture-border);
-    background: var(--texture-bg);
-    color: var(--text-preview);
-}
-
-blockquote p:last-child {
-    margin-bottom: 0;
-}
-
-/* ===== Lists ===== */
-ul,
-ol {
-    margin-bottom: 16px;
-    padding-left: 2em;
-}
-
-li {
-    margin-bottom: 4px;
-}
-
-li>ul,
-li>ol {
-    margin-top: 4px;
-    margin-bottom: 0;
-}
-
-/* ===== Tables - Plain Style ===== */
-table {
-    border-collapse: collapse;
-    width: 100%;
-    margin-bottom: 16px;
-    overflow-x: auto;
-    display: block;
-}
-
-th,
-td {
-    border: 1px solid var(--table-border);
-    padding: 8px 12px;
-    text-align: left;
-}
-
-th {
-    background: transparent !important;
-    font-weight: 600;
-}
-
-tr:nth-child(even) {
-    background: transparent !important;
-}
-
-/* ===== Horizontal Rules ===== */
-hr {
-    border: none;
-    border-top: 1px solid var(--preview-border);
-    margin: 24px 0;
-}
-
-/* ===== Images ===== */
-img {
-    max-width: 100%;
-    height: auto;
-    border-radius: 4px;
-}
-
 
 /* ===== Math ===== */
 .katex-display {
@@ -278,6 +90,64 @@ img {
 
 .task-list-item input[type="checkbox"] {
     margin-right: 0.5em;
+}
+
+/* ===== GitHub-style Alerts/Admonitions ===== */
+.markdown-alert {
+    padding: 8px 16px;
+    margin-bottom: 16px;
+    border-left: 4px solid;
+    border-radius: 0;
+}
+
+.markdown-alert-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.markdown-alert-note {
+    border-left-color: #0969da;
+    background-color: rgba(9, 105, 218, 0.1);
+}
+
+.markdown-alert-note .markdown-alert-title {
+    color: #0969da;
+}
+
+.markdown-alert-tip {
+    border-left-color: #1a7f37;
+    background-color: rgba(26, 127, 55, 0.1);
+}
+
+.markdown-alert-tip .markdown-alert-title {
+    color: #1a7f37;
+}
+
+.markdown-alert-important {
+    border-left-color: #8250df;
+    background-color: rgba(130, 80, 223, 0.1);
+}
+
+.markdown-alert-important .markdown-alert-title {
+    color: #8250df;
+}
+
+.markdown-alert-warning {
+    border-left-color: #9a6700;
+    background-color: rgba(154, 103, 0, 0.1);
+}
+
+.markdown-alert-warning .markdown-alert-title {
+    color: #9a6700;
+}
+
+.markdown-alert-caution {
+    border-left-color: #d1242f;
+    background-color: rgba(209, 36, 47, 0.1);
+}
+
+.markdown-alert-caution .markdown-alert-title {
+    color: #d1242f;
 }
 
 /* ===== Floating Toolbar ===== */
@@ -335,44 +205,151 @@ img {
     scroll-margin-top: 20px;
 }
 
-/* ===== Dark mode support ===== */
-@media (prefers-color-scheme: dark) {
-    :root {
-        --bg-preview: #1e1e1e;
-        --text-preview: #d4d4d4;
-        --text-preview-secondary: #9e9e9e;
-        --preview-border: #3c3c3c;
-        --code-bg: #2d2d30;
-        --code-border: #3c3c3c;
-        --table-header-bg: transparent;
-        --table-row-alt: transparent;
-        --table-border: #3c3c3c;
-        --texture-bg: #252526;
-        --texture-border: #252526;
-        --texture-text: #d4d4d4;
-        --link-color: #58a6ff;
-    }
+/* ===== Dark mode: override github-markdown.css colors ===== */
+body.vscode-dark .markdown-body {
+    color: #e6edf3;
+    background-color: #0d1117;
 }
 
-/* VS Code theme integration */
-body.vscode-dark {
-    --bg-preview: #1e1e1e;
-    --text-preview: #d4d4d4;
-    --text-preview-secondary: #9e9e9e;
-    --preview-border: #3c3c3c;
-    --code-bg: #2d2d30;
-    --code-border: #3c3c3c;
-    --table-header-bg: transparent;
-    --table-row-alt: transparent;
-    --table-border: #3c3c3c;
-    --texture-bg: #252526;
-    --texture-border: #252526;
-    --texture-text: #d4d4d4;
-    --link-color: #58a6ff;
+body.vscode-dark .markdown-body h1,
+body.vscode-dark .markdown-body h2 {
+    border-bottom-color: #30363d;
 }
 
-body.vscode-high-contrast {
-    --bg-preview: #000000;
-    --text-preview: #ffffff;
-    --preview-border: #ffffff;
+body.vscode-dark .markdown-body h1,
+body.vscode-dark .markdown-body h2,
+body.vscode-dark .markdown-body h3,
+body.vscode-dark .markdown-body h4,
+body.vscode-dark .markdown-body h5,
+body.vscode-dark .markdown-body h6 {
+    color: #e6edf3;
+}
+
+body.vscode-dark .markdown-body h6 {
+    color: #8b949e;
+}
+
+body.vscode-dark .markdown-body a {
+    color: #58a6ff;
+}
+
+body.vscode-dark .markdown-body hr {
+    background-color: #21262d;
+    border-bottom-color: #21262d;
+}
+
+body.vscode-dark .markdown-body blockquote {
+    color: #8b949e;
+    border-left-color: #30363d;
+}
+
+body.vscode-dark .markdown-body code,
+body.vscode-dark .markdown-body tt {
+    background-color: rgba(110,118,129,0.4);
+}
+
+body.vscode-dark .markdown-body .highlight pre,
+body.vscode-dark .markdown-body pre {
+    background-color: #161b22;
+    color: #e6edf3;
+}
+
+body.vscode-dark .markdown-body table tr {
+    background-color: #0d1117;
+    border-top-color: #30363d;
+}
+
+body.vscode-dark .markdown-body table tr:nth-child(2n) {
+    background-color: #161b22;
+}
+
+body.vscode-dark .markdown-body table th,
+body.vscode-dark .markdown-body table td {
+    border-color: #30363d;
+}
+
+body.vscode-dark .markdown-body kbd {
+    color: #e6edf3;
+    background-color: #161b22;
+    border-color: rgba(110,118,129,0.4);
+    box-shadow: inset 0 -1px 0 rgba(110,118,129,0.4);
+}
+
+body.vscode-dark .markdown-body img {
+    background-color: transparent;
+}
+
+body.vscode-dark .markdown-body mark {
+    background-color: rgba(187,128,9,0.15);
+    color: #e6edf3;
+}
+
+/* Dark mode scrollbar */
+body.vscode-dark ::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+body.vscode-dark ::-webkit-scrollbar-thumb {
+    background: #424242;
+}
+
+body.vscode-dark ::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Dark mode alerts */
+body.vscode-dark .markdown-alert-note {
+    border-left-color: #58a6ff;
+    background-color: rgba(56, 139, 253, 0.1);
+}
+
+body.vscode-dark .markdown-alert-note .markdown-alert-title {
+    color: #58a6ff;
+}
+
+body.vscode-dark .markdown-alert-tip {
+    border-left-color: #3fb950;
+    background-color: rgba(63, 185, 80, 0.1);
+}
+
+body.vscode-dark .markdown-alert-tip .markdown-alert-title {
+    color: #3fb950;
+}
+
+body.vscode-dark .markdown-alert-important {
+    border-left-color: #a371f7;
+    background-color: rgba(163, 113, 247, 0.1);
+}
+
+body.vscode-dark .markdown-alert-important .markdown-alert-title {
+    color: #a371f7;
+}
+
+body.vscode-dark .markdown-alert-warning {
+    border-left-color: #d29922;
+    background-color: rgba(210, 153, 34, 0.1);
+}
+
+body.vscode-dark .markdown-alert-warning .markdown-alert-title {
+    color: #d29922;
+}
+
+body.vscode-dark .markdown-alert-caution {
+    border-left-color: #f85149;
+    background-color: rgba(248, 81, 73, 0.1);
+}
+
+body.vscode-dark .markdown-alert-caution .markdown-alert-title {
+    color: #f85149;
+}
+
+/* ===== High Contrast ===== */
+body.vscode-high-contrast .markdown-body {
+    color: #ffffff;
+    background-color: #000000;
+}
+
+body.vscode-high-contrast .markdown-body h1,
+body.vscode-high-contrast .markdown-body h2 {
+    border-bottom-color: #ffffff;
 }
