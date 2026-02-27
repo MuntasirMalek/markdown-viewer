@@ -1215,13 +1215,18 @@ export class PreviewPanel {
         fixImagePaths();
         
         // Handle incremental content updates (preserves scroll position)
+        let lastRenderedContent = '';
         window.addEventListener('message', function(event) {
             const message = event.data;
             if (message.type === 'updateContent') {
+                const newRaw = message.content;
+                // Skip re-render if content hasn't changed
+                if (newRaw === lastRenderedContent) return;
+                lastRenderedContent = newRaw;
+                
                 // Suppress scroll echo during re-render
                 lastEditorScrollTime = Date.now();
                 
-                const newRaw = message.content;
                 document.getElementById('preview').innerHTML = renderMarkdown(newRaw);
                 fixImagePaths();
                 

@@ -36,9 +36,14 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
+    // Debounce preview updates for performance with large files
+    let updateTimer: ReturnType<typeof setTimeout> | undefined;
     const documentChangeListener = vscode.workspace.onDidChangeTextDocument((event) => {
         if (event.document.languageId === 'markdown') {
-            PreviewPanel.updateContent(event.document);
+            if (updateTimer) { clearTimeout(updateTimer); }
+            updateTimer = setTimeout(() => {
+                PreviewPanel.updateContent(event.document);
+            }, 300);
         }
     });
 
