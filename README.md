@@ -1,6 +1,5 @@
 # Utsho Markdown Viewer
 
-Live Markdown preview with KaTeX math, syntax highlighting, floating toolbar, and PDF export via Puppeteer.
 
 
 ## Features
