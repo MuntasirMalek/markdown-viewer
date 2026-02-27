@@ -17,14 +17,6 @@
 
 ## Installation
 
-### From VSIX (Recommended)
-
-⬇️ [Download Latest VSIX](https://github.com/MuntasirMalek/Test/releases/latest)
-
-1. Download the `.vsix` file
-2. In VS Code: Extensions → `...` → Install from VSIX
-3. Select the downloaded file
-
 ### From Source
 
 ```bash
