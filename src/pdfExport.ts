@@ -178,7 +178,7 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri, d
 }
 
 export async function exportToPdf(extensionUri: vscode.Uri, document: vscode.TextDocument): Promise<void> {
-    const outputChannel = vscode.extensions.getExtension('utsho.markdown-viewer-enhanced')?.exports?.outputChannel;
+    const outputChannel = vscode.extensions.getExtension('utsho.markdown-viewer-pro')?.exports?.outputChannel;
     // Note: exports might be undefined depending on activation order, need to check.
     // Actually we can just create one if missing? But let's assume one exists or just log to console.
 

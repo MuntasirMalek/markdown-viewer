@@ -31,7 +31,7 @@ Live Markdown preview with KaTeX math, syntax highlighting, floating toolbar, an
 
 ```bash
 git clone https://github.com/MuntasirMalek/Test.git
-cd markdown-viewer-enhanced
+cd markdown-viewer-pro
 npm install
 npm run compile
 ```
