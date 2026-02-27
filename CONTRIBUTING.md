@@ -18,7 +18,7 @@ If you find a bug or have a feature request:
 1. Clone the repository:
    ```bash
    git clone https://github.com/MuntasirMalek/Test.git
-   cd markdown-viewer-enhanced
+   cd markdown-viewer-pro
    ```
 
 2. Install dependencies:
