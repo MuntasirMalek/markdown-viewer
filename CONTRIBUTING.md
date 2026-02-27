@@ -1,4 +1,4 @@
-# Contributing to Markdown Viewer Enhanced
+# Contributing to Utsho Markdown Viewer
 
 Thank you for your interest in contributing! Here's how you can help:
 
@@ -18,7 +18,7 @@ If you find a bug or have a feature request:
 1. Clone the repository:
    ```bash
    git clone https://github.com/MuntasirMalek/Test.git
-   cd markdown-viewer-pro
+   cd utsho-markdown-viewer
    ```
 
 2. Install dependencies:

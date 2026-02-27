@@ -4,13 +4,13 @@ import { PreviewPanel } from './previewPanel';
 import { exportToPdf } from './pdfExport';
 
 export function activate(context: vscode.ExtensionContext) {
-    const outputChannel = vscode.window.createOutputChannel('Markdown Viewer Enhanced');
+    const outputChannel = vscode.window.createOutputChannel('Utsho Markdown Viewer');
     context.subscriptions.push(outputChannel);
     outputChannel.appendLine('Extension Activation Started (v3.1.0).');
 
     // Status Bar Item for Sync Health
     const syncStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-    syncStatusItem.command = 'markdown-viewer.showLogs';
+    syncStatusItem.command = 'utsho-markdown-viewer.showLogs';
     context.subscriptions.push(syncStatusItem);
 
     const openPreview = () => {
@@ -23,11 +23,11 @@ export function activate(context: vscode.ExtensionContext) {
         }
     };
 
-    const previewCommand = vscode.commands.registerCommand('markdown-viewer.preview', openPreview);
+    const previewCommand = vscode.commands.registerCommand('utsho-markdown-viewer.preview', openPreview);
     const compatPreviewSide = vscode.commands.registerCommand('markdown-preview-enhanced.openPreviewToTheSide', openPreview);
     const compatPreview = vscode.commands.registerCommand('markdown-preview-enhanced.openPreview', openPreview);
 
-    const exportPdfCommand = vscode.commands.registerCommand('markdown-viewer.exportPdf', async () => {
+    const exportPdfCommand = vscode.commands.registerCommand('utsho-markdown-viewer.exportPdf', async () => {
         const editor = vscode.window.activeTextEditor;
         if (editor && editor.document.languageId === 'markdown') {
             await exportToPdf(context.extensionUri, editor.document);

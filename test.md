@@ -1,6 +1,6 @@
 # Test Document
 
-This is a test document to verify the Markdown Viewer Enhanced extension.
+This is a test document to verify the Utsho Markdown Viewer extension.
 
 ## Features Demo
 
