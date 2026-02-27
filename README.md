@@ -1,4 +1,4 @@
-# Markdown Viewer Enhanced
+# Utsho Markdown Viewer
 
 Live Markdown preview with KaTeX math, syntax highlighting, floating toolbar, and PDF export via Puppeteer.
 
@@ -31,7 +31,7 @@ Live Markdown preview with KaTeX math, syntax highlighting, floating toolbar, an
 
 ```bash
 git clone https://github.com/MuntasirMalek/Test.git
-cd markdown-viewer-pro
+cd utsho-markdown-viewer
 npm install
 npm run compile
 ```

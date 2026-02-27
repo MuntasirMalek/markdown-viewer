@@ -117,13 +117,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.41] - 2024-01-26
 
 ### Debugging
-- **Verbose Logs**: Enabled full debug logging in the "Markdown Viewer Enhanced" Output Channel. This will print exactly what files are being compared during sync, allowing us to pinpoint why the sync is failing (e.g., path mismatch, missing preview doc, etc.).
+- **Verbose Logs**: Enabled full debug logging in the "Utsho Markdown Viewer" Output Channel. This will print exactly what files are being compared during sync, allowing us to pinpoint why the sync is failing (e.g., path mismatch, missing preview doc, etc.).
 
 ## [1.0.40] - 2024-01-26
 
 ### Fixed
 - **Sync Fix (Mac/Windows)**: Use case-insensitive path normalization key to comparisons. This ensures that `/Users/User/File.md` and `/users/user/file.md` are treated as the same file, restoring sync functionality on systems with case-insensitive file systems.
-- **Logging**: Added output channel logging (search "Markdown Viewer Enhanced" in Output tab) to help troubleshoot if sync issues persist.
+- **Logging**: Added output channel logging (search "Utsho Markdown Viewer" in Output tab) to help troubleshoot if sync issues persist.
 
 ## [1.0.39] - 2024-01-26
 

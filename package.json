@@ -1,6 +1,6 @@
 {
-  "name": "markdown-viewer-enhanced",
-  "displayName": "Markdown Viewer Enhanced",
+  "name": "utsho-markdown-viewer",
+  "displayName": "Utsho Markdown Viewer",
   "description": "Live Markdown preview with KaTeX math, syntax highlighting, floating toolbar, and PDF export via Puppeteer",
   "version": "2.0.0",
   "publisher": "utsho",
@@ -46,18 +46,18 @@
   "contributes": {
     "commands": [
       {
-        "command": "markdown-viewer.preview",
-        "title": "Markdown Viewer: Open Preview",
+        "command": "utsho-markdown-viewer.preview",
+        "title": "Utsho Markdown Viewer: Open Preview",
         "icon": "$(preview)"
       },
       {
-        "command": "markdown-viewer.exportPdf",
-        "title": "Markdown Viewer: Export to PDF",
+        "command": "utsho-markdown-viewer.exportPdf",
+        "title": "Utsho Markdown Viewer: Export to PDF",
         "icon": "$(file-pdf)"
       },
       {
         "command": "markdown-preview-enhanced.openPreviewToTheSide",
-        "title": "Markdown Viewer: Open Preview (Compatibility)",
+        "title": "Utsho Markdown Viewer: Open Preview (Compatibility)",
         "icon": "$(preview)"
       },
       {
@@ -70,39 +70,39 @@
       "editor/title": [
         {
           "when": "resourceLangId == markdown",
-          "command": "markdown-viewer.preview",
+          "command": "utsho-markdown-viewer.preview",
           "group": "navigation"
         }
       ],
       "editor/context": [
         {
           "when": "resourceLangId == markdown",
-          "command": "markdown-viewer.preview",
+          "command": "utsho-markdown-viewer.preview",
           "group": "navigation"
         },
         {
           "when": "resourceLangId == markdown",
-          "command": "markdown-viewer.exportPdf",
+          "command": "utsho-markdown-viewer.exportPdf",
           "group": "navigation"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "markdown-viewer.preview",
+        "command": "utsho-markdown-viewer.preview",
         "key": "ctrl+shift+v",
         "mac": "cmd+shift+v",
         "when": "resourceLangId == markdown"
       },
       {
-        "command": "markdown-viewer.exportPdf",
+        "command": "utsho-markdown-viewer.exportPdf",
         "key": "ctrl+shift+e",
         "mac": "cmd+shift+e",
         "when": "resourceLangId == markdown"
       }
     ],
     "configuration": {
-      "title": "Markdown Viewer Enhanced",
+      "title": "Utsho Markdown Viewer",
       "properties": {
         "markdownViewer.chromePath": {
           "type": "string",
