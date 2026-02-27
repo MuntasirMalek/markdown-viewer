@@ -2,7 +2,6 @@
 
 Live Markdown preview with KaTeX math, syntax highlighting, floating toolbar, and PDF export via Puppeteer.
 
-![Preview](screenshots/preview.png)
 
 ## Features
 
