@@ -10,12 +10,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/MuntasirMalek/Test"
+    "url": "https://github.com/MuntasirMalek/markdown-viewer"
   },
   "bugs": {
-    "url": "https://github.com/MuntasirMalek/Test/issues"
+    "url": "https://github.com/MuntasirMalek/markdown-viewer/issues"
   },
-  "homepage": "https://github.com/MuntasirMalek/Test#readme",
+  "homepage": "https://github.com/MuntasirMalek/markdown-viewer#readme",
   "icon": "icon.png",
   "galleryBanner": {
     "color": "#1e1e1e",

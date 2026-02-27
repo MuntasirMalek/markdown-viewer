@@ -106,6 +106,12 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri, d
         .markdown-alert-warning .markdown-alert-title { color: #9a6700; }
         .markdown-alert-caution { border-left-color: #d1242f; background-color: rgba(209, 36, 47, 0.1); }
         .markdown-alert-caution .markdown-alert-title { color: #d1242f; }
+        /* Force all <details> to be open/visible in PDF */
+        details { display: block !important; }
+        details > * { display: block !important; }
+        details > summary { display: list-item !important; cursor: default; }
+        details > summary::marker,
+        details > summary::-webkit-details-marker { display: inline-block !important; }
     </style>
 </head>
 <body>
@@ -164,6 +170,8 @@ function generateHtmlForPdf(markdownContent: string, extensionUri: vscode.Uri, d
 
         const raw = ${JSON.stringify(markdownContent)};
         document.getElementById('content').innerHTML = renderMarkdown(raw);
+        // Force all <details> elements to be open for PDF export
+        document.querySelectorAll('details').forEach(function(d) { d.setAttribute('open', ''); });
     </script>
 </body>
 </html>`;
