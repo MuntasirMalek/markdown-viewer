@@ -1014,6 +1014,7 @@ export class PreviewPanel {
 
         // ========== CHUNK SPLITTING ==========
         // Split markdown text into chunks of ~CHUNK_TARGET_LINES lines at block boundaries
+        // Respects <details> nesting: never splits inside an open <details> block
         function splitIntoChunks(text) {
             const lines = text.split('\\n');
             const chunks = [];
@@ -1025,6 +1026,18 @@ export class PreviewPanel {
                 return chunks;
             }
             
+            // Pre-compute <details> nesting depth after each line
+            const depthAfter = new Array(lines.length);
+            let _depth = 0;
+            for (let d = 0; d < lines.length; d++) {
+                const ln = lines[d];
+                const opens = (ln.match(/<details[\\s>]/gi) || []).length;
+                const closes = (ln.match(/<\\/details>/gi) || []).length;
+                _depth += opens - closes;
+                if (_depth < 0) _depth = 0;
+                depthAfter[d] = _depth;
+            }
+            
             let i = 0;
             while (i < lines.length) {
                 let chunkEnd = Math.min(i + CHUNK_TARGET_LINES, lines.length);
@@ -1032,10 +1045,12 @@ export class PreviewPanel {
                 // Try to find a good break point (blank line or heading) near the target
                 if (chunkEnd < lines.length) {
                     let bestBreak = -1;
-                    // Search within 100 lines of the target for a good break
+                    // Search within range of the target for a good break
                     const searchStart = Math.max(i + Math.floor(CHUNK_TARGET_LINES * 0.7), i + 1);
                     const searchEnd = Math.min(i + Math.floor(CHUNK_TARGET_LINES * 1.3), lines.length);
                     for (let j = searchStart; j < searchEnd; j++) {
+                        // Only allow breaks where <details> nesting depth is 0
+                        if (depthAfter[j] !== 0) continue;
                         const trimmed = lines[j].trim();
                         if (trimmed === '' || /^#{1,6}\\s/.test(trimmed)) {
                             bestBreak = j;
@@ -1046,6 +1061,15 @@ export class PreviewPanel {
                             }
                             if (/^#{1,6}\\s/.test(trimmed)) {
                                 bestBreak = j;
+                                break;
+                            }
+                        }
+                    }
+                    // If no safe break in normal range, extend search to find next depth=0 point
+                    if (bestBreak === -1) {
+                        for (let j = searchEnd; j < lines.length; j++) {
+                            if (depthAfter[j] === 0) {
+                                bestBreak = j + 1;
                                 break;
                             }
                         }
