@@ -2,7 +2,7 @@
   "name": "utsho-markdown-viewer",
   "displayName": "Utsho Markdown Viewer",
   "description": "Live Markdown preview with KaTeX math, syntax highlighting, floating toolbar, and PDF export via Puppeteer",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "utsho",
   "author": {
     "name": "Utsho"

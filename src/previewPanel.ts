@@ -588,7 +588,6 @@ export class PreviewPanel {
         const highlightJs = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'highlight.min.js'));
         const markedJs = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'marked.min.js'));
         const githubCss = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vendor', 'github-markdown.css'));
-        const escapedContent = this._escapeHtml(content);
 
         // THE FIX: Updated inline script to capture blockContext using closest()
         const inlineScript = `
@@ -941,27 +940,28 @@ export class PreviewPanel {
         <button id="redHighlightBtn" title="Red Highlight"><span style="display:inline-block;width:14px;height:14px;background:#ff6b6b;border-radius:50%"></span></button>
         <button id="deleteBtn" title="Delete">🗑️</button>
     </div>
-    <script id="markdown-content" type="text/plain">${escapedContent}</script>
     <script>
         ${inlineScript}
     </script>
     <script>
-        // ========== LINE-TRACKING MARKDOWN RENDERER ==========
-        // Embeds data-line attributes DURING parsing (not post-render matching)
+        // ========== CHUNKED LINE-TRACKING MARKDOWN RENDERER ==========
+        // Splits large documents into chunks for performance.
+        // Each chunk is parsed/rendered independently. On edits, only changed chunks re-render.
+        
+        const CHUNK_TARGET_LINES = 500;
         
         // Build a line offset map: charOffset → lineNumber
         function buildLineMap(text) {
-            const map = [0]; // line 0 starts at char 0
+            const map = [0];
             for (let i = 0; i < text.length; i++) {
                 if (text[i] === '\\n') {
-                    map.push(i + 1); // next line starts after \\n
+                    map.push(i + 1);
                 }
             }
             return map;
         }
         
         function charOffsetToLine(offset, lineMap) {
-            // Binary search for the line containing this offset
             let lo = 0, hi = lineMap.length - 1;
             while (lo < hi) {
                 const mid = (lo + hi + 1) >> 1;
@@ -971,19 +971,15 @@ export class PreviewPanel {
             return lo;
         }
         
-        // Find the character offset of a token's raw text in the source
-        // We track searchFrom to maintain document order
         let _tokenSearchFrom = 0;
         
         function findTokenOffset(raw, sourceText) {
             if (!raw || raw.length === 0) return -1;
-            // Search from current position forward
             const idx = sourceText.indexOf(raw, _tokenSearchFrom);
             if (idx !== -1) {
                 _tokenSearchFrom = idx + raw.length;
                 return idx;
             }
-            // Fallback: search from beginning (shouldn't happen often)
             const fallback = sourceText.indexOf(raw);
             if (fallback !== -1) {
                 _tokenSearchFrom = fallback + raw.length;
@@ -994,9 +990,6 @@ export class PreviewPanel {
 
         const renderer = new marked.Renderer();
         
-        // Store line info that walkTokens populates
-        const tokenLineMap = new WeakMap();
-        
         // Highlight text extensions
         renderer.text = function(token) {
             let text = token.text || token;
@@ -1005,18 +998,6 @@ export class PreviewPanel {
                 text = text.replace(/::([^:]+)::/g, '<mark class="red-highlight">$1</mark>');
             }
             return text;
-        };
-
-        // Blockquote with alert support
-        renderer.blockquote = function(quote) {
-            const match = quote.match(/^<p>\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\]\\s*/i);
-            if (match) {
-                const type = match[1].toLowerCase();
-                const title = type.charAt(0).toUpperCase() + type.slice(1);
-                const content = quote.replace(/^<p>\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\]\\s*/i, '<p>');
-                return \`<div class="markdown-alert markdown-alert-\${type}"><p class="markdown-alert-title">\${title}</p>\${content}</div>\`;
-            }
-            return \`<blockquote>\${quote}</blockquote>\`;
         };
         
         marked.setOptions({
@@ -1031,45 +1012,97 @@ export class PreviewPanel {
             }
         });
 
-        function renderMarkdown(text) {
+        // ========== CHUNK SPLITTING ==========
+        // Split markdown text into chunks of ~CHUNK_TARGET_LINES lines at block boundaries
+        function splitIntoChunks(text) {
+            const lines = text.split('\\n');
+            const chunks = [];
+            let chunkStart = 0;
+            
+            // For small files, use a single chunk (no overhead)
+            if (lines.length <= CHUNK_TARGET_LINES * 1.5) {
+                chunks.push({ startLine: 0, endLine: lines.length - 1, text: text });
+                return chunks;
+            }
+            
+            let i = 0;
+            while (i < lines.length) {
+                let chunkEnd = Math.min(i + CHUNK_TARGET_LINES, lines.length);
+                
+                // Try to find a good break point (blank line or heading) near the target
+                if (chunkEnd < lines.length) {
+                    let bestBreak = -1;
+                    // Search within 100 lines of the target for a good break
+                    const searchStart = Math.max(i + Math.floor(CHUNK_TARGET_LINES * 0.7), i + 1);
+                    const searchEnd = Math.min(i + Math.floor(CHUNK_TARGET_LINES * 1.3), lines.length);
+                    for (let j = searchStart; j < searchEnd; j++) {
+                        const trimmed = lines[j].trim();
+                        if (trimmed === '' || /^#{1,6}\\s/.test(trimmed)) {
+                            bestBreak = j;
+                            // Prefer blank lines right before headings
+                            if (trimmed === '' && j + 1 < lines.length && /^#{1,6}\\s/.test(lines[j + 1].trim())) {
+                                bestBreak = j;
+                                break;
+                            }
+                            if (/^#{1,6}\\s/.test(trimmed)) {
+                                bestBreak = j;
+                                break;
+                            }
+                        }
+                    }
+                    if (bestBreak > i) {
+                        chunkEnd = bestBreak;
+                    }
+                }
+                
+                const chunkLines = lines.slice(i, chunkEnd);
+                chunks.push({
+                    startLine: i,
+                    endLine: chunkEnd - 1,
+                    text: chunkLines.join('\\n')
+                });
+                i = chunkEnd;
+            }
+            return chunks;
+        }
+
+        // ========== PER-CHUNK RENDERER ==========
+        // Renders a single chunk of markdown with correct data-line attributes
+        function renderChunk(chunkText, lineOffset) {
             const mathBlocks = []; 
             const inlineMath = [];
             
-            // Protect math blocks from markdown parsing
+            // Protect math blocks
+            let text = chunkText;
             text = text.replace(/\\$\\$([^$]+)\\$\\$/g, (m, math) => { mathBlocks.push(math); return \`%%MATHBLOCK\${mathBlocks.length-1}%%\`; });
             text = text.replace(/\\$([^$\\n]+)\\$/g, (m, math) => { inlineMath.push(math); return \`%%INLINEMATH\${inlineMath.length-1}%%\`; });
             
-            // Build line map for source line tracking
             const lineMap = buildLineMap(text);
             _tokenSearchFrom = 0;
             
-            // Tokenize first to get tokens with raw text
             const tokens = marked.lexer(text);
             
-            // Walk tokens and assign line numbers based on their raw text position
             function assignLines(tokenList) {
                 for (const token of tokenList) {
                     if (token.raw) {
                         const offset = findTokenOffset(token.raw, text);
                         if (offset !== -1) {
-                            token._sourceLine = charOffsetToLine(offset, lineMap);
+                            token._sourceLine = charOffsetToLine(offset, lineMap) + lineOffset;
                         }
                     }
-                    // Recurse into child tokens
                     if (token.tokens) assignLines(token.tokens);
                     if (token.items) {
                         for (const item of token.items) {
                             if (item.raw) {
                                 const offset = text.indexOf(item.raw, Math.max(0, _tokenSearchFrom - item.raw.length - 50));
                                 if (offset !== -1) {
-                                    item._sourceLine = charOffsetToLine(offset, lineMap);
+                                    item._sourceLine = charOffsetToLine(offset, lineMap) + lineOffset;
                                 }
                             }
                             if (item.tokens) assignLines(item.tokens);
                         }
                     }
                     if (token.rows) {
-                        // table rows
                         for (const row of token.rows) {
                             for (const cell of row) {
                                 if (cell.tokens) assignLines(cell.tokens);
@@ -1079,24 +1112,11 @@ export class PreviewPanel {
                 }
             }
             
-            // Reset search position and assign lines
             _tokenSearchFrom = 0;
             assignLines(tokens);
             
-            // Now render with a custom renderer that reads _sourceLine
-            // We need to override the parser to inject data-line into block elements
-            const origParagraph = renderer.paragraph;
-            const origHeading = renderer.heading;
-            const origCode = renderer.code;
-            const origBlockquote = renderer.blockquote;
-            const origListitem = renderer.listitem;
-            const origTable = renderer.table;
-            const origHr = renderer.hr;
-            
-            // Store current token line during rendering
+            // Build block line tracking for this chunk
             let currentTokenLines = [];
-            
-            // Walk tokens to build an ordered list of (type, line) for the renderer
             function collectBlockLines(tokenList) {
                 for (const token of tokenList) {
                     if (token._sourceLine !== undefined) {
@@ -1116,7 +1136,6 @@ export class PreviewPanel {
             }
             collectBlockLines(tokens);
             
-            // Counters for each block type to match tokens to renderer calls
             const lineCounters = {};
             function getNextLine(type) {
                 if (!lineCounters[type]) lineCounters[type] = 0;
@@ -1125,19 +1144,17 @@ export class PreviewPanel {
                 return (idx < items.length) ? items[idx].line : undefined;
             }
             
-            // Override renderer methods to inject data-line
+            // Override renderer methods with data-line injection
             renderer.paragraph = function(text) {
                 const line = getNextLine('paragraph');
                 const attr = (line !== undefined) ? \` data-line="\${line}"\` : '';
                 return \`<p\${attr}>\${text}</p>\\n\`;
             };
-            
             renderer.heading = function(text, level, raw) {
                 const line = getNextLine('heading');
                 const attr = (line !== undefined) ? \` data-line="\${line}"\` : '';
                 return \`<h\${level}\${attr}>\${text}</h\${level}>\\n\`;
             };
-            
             renderer.code = function(code, language, escaped) {
                 const line = getNextLine('code');
                 const attr = (line !== undefined) ? \` data-line="\${line}"\` : '';
@@ -1151,11 +1168,9 @@ export class PreviewPanel {
                 const langClass = lang ? \` class="language-\${lang}"\` : '';
                 return \`<pre\${attr}><code\${langClass}>\${highlighted}</code></pre>\\n\`;
             };
-            
             renderer.blockquote = function(quote) {
                 const line = getNextLine('blockquote');
                 const attr = (line !== undefined) ? \` data-line="\${line}"\` : '';
-                // Alert/admonition support
                 const match = quote.match(/^<p>\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\]\\s*/i);
                 if (match) {
                     const type = match[1].toLowerCase();
@@ -1165,29 +1180,25 @@ export class PreviewPanel {
                 }
                 return \`<blockquote\${attr}>\${quote}</blockquote>\\n\`;
             };
-            
             renderer.listitem = function(text) {
                 const line = getNextLine('list_item');
                 const attr = (line !== undefined) ? \` data-line="\${line}"\` : '';
                 return \`<li\${attr}>\${text}</li>\\n\`;
             };
-            
             renderer.table = function(header, body) {
                 const line = getNextLine('table');
                 const attr = (line !== undefined) ? \` data-line="\${line}"\` : '';
                 return \`<table\${attr}>\\n<thead>\\n\${header}</thead>\\n<tbody>\\n\${body}</tbody>\\n</table>\\n\`;
             };
-            
             renderer.hr = function() {
                 const line = getNextLine('hr');
                 const attr = (line !== undefined) ? \` data-line="\${line}"\` : '';
                 return \`<hr\${attr}>\\n\`;
             };
             
-            // Parse using the token tree (which already has line info)
             let html = marked.parser(tokens);
             
-            // Restore math blocks
+            // Restore math
             html = html.replace(/%%MATHBLOCK(\\d+)%%/g, (m, i) => {
                 try { return katex.renderToString(mathBlocks[parseInt(i)], { displayMode: true, throwOnError: false }); } catch(e) { return m; }
             });
@@ -1196,15 +1207,16 @@ export class PreviewPanel {
             });
             return html;
         }
-
-        const raw = ${JSON.stringify(content)};
-        const documentBaseUri = "${documentBaseUri}";
-        document.getElementById('preview').innerHTML = renderMarkdown(raw);
         
-        // Fix relative image paths
-        function fixImagePaths() {
+        // ========== CHUNK STATE ==========
+        let currentChunks = [];    // Array of { startLine, endLine, text }
+        let renderedChunkTexts = []; // The text used to render each chunk (for diffing)
+
+        const documentBaseUri = "${documentBaseUri}";
+        
+        function fixImagePaths(root) {
             if (documentBaseUri) {
-                document.querySelectorAll('#preview img').forEach(img => {
+                (root || document).querySelectorAll('#preview img, .md-chunk img').forEach(img => {
                     const src = img.getAttribute('src');
                     if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:') && !src.startsWith('vscode-')) {
                         img.setAttribute('src', documentBaseUri + '/' + src);
@@ -1212,25 +1224,149 @@ export class PreviewPanel {
                 });
             }
         }
-        fixImagePaths();
+        
+        // ========== INITIAL RENDER ==========
+        function initialRender(rawText) {
+            const previewRoot = document.getElementById('preview');
+            previewRoot.innerHTML = '';
+            
+            currentChunks = splitIntoChunks(rawText);
+            renderedChunkTexts = new Array(currentChunks.length).fill(null);
+            
+            // Create placeholder divs for all chunks
+            for (let i = 0; i < currentChunks.length; i++) {
+                const div = document.createElement('div');
+                div.className = 'md-chunk';
+                div.setAttribute('data-chunk-idx', String(i));
+                div.setAttribute('data-start-line', String(currentChunks[i].startLine));
+                previewRoot.appendChild(div);
+            }
+            
+            // Determine which chunks are near the viewport (render immediately)
+            // For initial load, render the first few chunks right away
+            const immediateCount = Math.min(3, currentChunks.length);
+            for (let i = 0; i < immediateCount; i++) {
+                renderChunkIntoDOM(i);
+            }
+            
+            // Render remaining chunks in background using requestIdleCallback or setTimeout
+            if (currentChunks.length > immediateCount) {
+                let nextIdx = immediateCount;
+                function renderNextBatch(deadline) {
+                    // Render chunks while we have idle time (or up to 3 per batch)
+                    let count = 0;
+                    while (nextIdx < currentChunks.length && count < 3) {
+                        renderChunkIntoDOM(nextIdx);
+                        nextIdx++;
+                        count++;
+                        // If we have a deadline and time is running out, yield
+                        if (deadline && deadline.timeRemaining && deadline.timeRemaining() < 5) break;
+                    }
+                    if (nextIdx < currentChunks.length) {
+                        if (typeof requestIdleCallback !== 'undefined') {
+                            requestIdleCallback(renderNextBatch, { timeout: 100 });
+                        } else {
+                            setTimeout(() => renderNextBatch(null), 16);
+                        }
+                    }
+                }
+                if (typeof requestIdleCallback !== 'undefined') {
+                    requestIdleCallback(renderNextBatch, { timeout: 100 });
+                } else {
+                    setTimeout(() => renderNextBatch(null), 16);
+                }
+            }
+            
+            fixImagePaths(previewRoot);
+        }
+        
+        function renderChunkIntoDOM(idx) {
+            const chunk = currentChunks[idx];
+            if (!chunk) return;
+            const div = document.querySelector(\`.md-chunk[data-chunk-idx="\${idx}"]\`);
+            if (!div) return;
+            div.innerHTML = renderChunk(chunk.text, chunk.startLine);
+            renderedChunkTexts[idx] = chunk.text;
+            fixImagePaths(div);
+        }
+        
+        // ========== INCREMENTAL UPDATE ==========
+        function incrementalUpdate(newRaw) {
+            const newChunks = splitIntoChunks(newRaw);
+            const previewRoot = document.getElementById('preview');
+            
+            // Find which chunks changed by comparing text
+            const maxLen = Math.max(currentChunks.length, newChunks.length);
+            
+            // Fast path: if chunk count is the same, only update changed chunks
+            if (newChunks.length === currentChunks.length) {
+                for (let i = 0; i < newChunks.length; i++) {
+                    if (newChunks[i].text !== renderedChunkTexts[i]) {
+                        currentChunks[i] = newChunks[i];
+                        const div = document.querySelector(\`.md-chunk[data-chunk-idx="\${i}"]\`);
+                        if (div) {
+                            div.setAttribute('data-start-line', String(newChunks[i].startLine));
+                            div.innerHTML = renderChunk(newChunks[i].text, newChunks[i].startLine);
+                            renderedChunkTexts[i] = newChunks[i].text;
+                            fixImagePaths(div);
+                        }
+                    }
+                }
+                currentChunks = newChunks;
+                return;
+            }
+            
+            // Chunk count changed: rebuild the DOM structure
+            // But still try to reuse unchanged leading chunks
+            let firstChanged = 0;
+            while (firstChanged < currentChunks.length && firstChanged < newChunks.length 
+                   && currentChunks[firstChanged].text === newChunks[firstChanged].text) {
+                firstChanged++;
+            }
+            
+            // Remove old chunk divs from firstChanged onward
+            const oldDivs = previewRoot.querySelectorAll('.md-chunk');
+            for (let i = oldDivs.length - 1; i >= firstChanged; i--) {
+                oldDivs[i].remove();
+            }
+            
+            // Add new chunk divs from firstChanged onward
+            for (let i = firstChanged; i < newChunks.length; i++) {
+                const div = document.createElement('div');
+                div.className = 'md-chunk';
+                div.setAttribute('data-chunk-idx', String(i));
+                div.setAttribute('data-start-line', String(newChunks[i].startLine));
+                div.innerHTML = renderChunk(newChunks[i].text, newChunks[i].startLine);
+                previewRoot.appendChild(div);
+                fixImagePaths(div);
+            }
+            
+            currentChunks = newChunks;
+            renderedChunkTexts = newChunks.map(c => c.text);
+            
+            // Re-index all chunk divs (update data-chunk-idx)
+            const allDivs = previewRoot.querySelectorAll('.md-chunk');
+            allDivs.forEach((div, idx) => div.setAttribute('data-chunk-idx', String(idx)));
+        }
+        
+        // ========== STARTUP ==========
+        const raw = ${JSON.stringify(content)};
+        initialRender(raw);
         
         // Handle incremental content updates (preserves scroll position)
-        let lastRenderedContent = '';
+        let lastRenderedContent = raw;
         window.addEventListener('message', function(event) {
             const message = event.data;
             if (message.type === 'updateContent') {
                 const newRaw = message.content;
-                // Skip re-render if content hasn't changed
                 if (newRaw === lastRenderedContent) return;
                 lastRenderedContent = newRaw;
                 
                 // Suppress scroll echo during re-render
                 lastEditorScrollTime = Date.now();
                 
-                document.getElementById('preview').innerHTML = renderMarkdown(newRaw);
-                fixImagePaths();
+                incrementalUpdate(newRaw);
                 
-                // Save scroll state
                 if (previewEl) {
                     vscode.setState({ scrollTop: previewEl.scrollTop });
                 }
@@ -1241,7 +1377,4 @@ export class PreviewPanel {
 </html>`;
     }
 
-    private _escapeHtml(text: string): string {
-        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-    }
 }
