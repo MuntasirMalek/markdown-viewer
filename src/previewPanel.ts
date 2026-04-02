@@ -1319,8 +1319,9 @@ export class PreviewPanel {
             const newChunks = splitIntoChunks(newRaw);
             const previewRoot = document.getElementById('preview');
             
-            // Find which chunks changed by comparing text
-            const maxLen = Math.max(currentChunks.length, newChunks.length);
+            // Save scroll position before any DOM changes
+            const savedScrollTop = previewEl ? previewEl.scrollTop : 0;
+            let scrollDelta = 0;
             
             // Fast path: if chunk count is the same, only update changed chunks
             if (newChunks.length === currentChunks.length) {
@@ -1329,14 +1330,29 @@ export class PreviewPanel {
                         currentChunks[i] = newChunks[i];
                         const div = document.querySelector(\`.md-chunk[data-chunk-idx="\${i}"]\`);
                         if (div) {
+                            // Measure height before re-render
+                            const oldHeight = div.offsetHeight;
+                            const chunkTop = div.offsetTop;
+                            
                             div.setAttribute('data-start-line', String(newChunks[i].startLine));
                             div.innerHTML = renderChunk(newChunks[i].text, newChunks[i].startLine);
                             renderedChunkTexts[i] = newChunks[i].text;
                             fixImagePaths(div);
+                            
+                            // If this chunk is above the viewport, accumulate height delta
+                            const newHeight = div.offsetHeight;
+                            if (chunkTop < savedScrollTop) {
+                                scrollDelta += (newHeight - oldHeight);
+                            }
                         }
                     }
                 }
                 currentChunks = newChunks;
+                
+                // Adjust scroll to compensate for height changes above viewport
+                if (previewEl && scrollDelta !== 0) {
+                    previewEl.scrollTop = savedScrollTop + scrollDelta;
+                }
                 return;
             }
             
@@ -1371,6 +1387,11 @@ export class PreviewPanel {
             // Re-index all chunk divs (update data-chunk-idx)
             const allDivs = previewRoot.querySelectorAll('.md-chunk');
             allDivs.forEach((div, idx) => div.setAttribute('data-chunk-idx', String(idx)));
+            
+            // Restore scroll position after DOM rebuild
+            if (previewEl) {
+                previewEl.scrollTop = savedScrollTop;
+            }
         }
         
         // ========== STARTUP ==========
@@ -1386,10 +1407,13 @@ export class PreviewPanel {
                 if (newRaw === lastRenderedContent) return;
                 lastRenderedContent = newRaw;
                 
-                // Suppress scroll echo during re-render
+                // Suppress scroll sync during re-render to prevent feedback loops
                 lastEditorScrollTime = Date.now();
                 
                 incrementalUpdate(newRaw);
+                
+                // Re-suppress after render in case layout triggered scroll events
+                lastEditorScrollTime = Date.now();
                 
                 if (previewEl) {
                     vscode.setState({ scrollTop: previewEl.scrollTop });
